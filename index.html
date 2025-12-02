@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MathMagica</title>
+    
+    <!-- Estilos y Fuentes -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- React y ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel para traducir JSX en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Import Map para Google GenAI -->
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.run/@google/genai"
+      }
+    }
+    </script>
+
+    <style>
+      body {
+        font-family: 'Fredoka', sans-serif;
+        background-color: #fce7f3; /* pink-100 */
+        user-select: none;
+      }
+      .animate-bounce-short {
+        animation: bounce 0.5s infinite;
+      }
+      @keyframes bounce {
+        0%, 100% { transform: translateY(-5%); }
+        50% { transform: translateY(0); }
+      }
+      .fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .shake {
+        animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+      }
+      @keyframes shake {
+        10%, 90% { transform: translate3d(-1px, 0, 0); }
+        20%, 80% { transform: translate3d(2px, 0, 0); }
+        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+        40%, 60% { transform: translate3d(4px, 0, 0); }
+      }
+      .card-inner {
+        transition: transform 0.6s;
+        transform-style: preserve-3d;
+      }
+      .card-flipped .card-inner {
+        transform: rotateY(180deg);
+      }
+      .card-front, .card-back {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        backface-visibility: hidden;
+      }
+      .card-back {
+        transform: rotateY(180deg);
+      }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- CÓDIGO DE LA APLICACIÓN -->
+    <script type="text/babel" data-type="module">
+        import { GoogleGenAI } from "@google/genai";
+
+        // --- CONSTANTES Y CONFIGURACIÓN ---
+        
+        window.process = { env: { API_KEY: '' } }; 
+
+        const INITIAL_REWARDS = [
+          { id: 'cat', emoji: '🐱', name: 'Gatito Curioso', cost: 50, unlocked: false },
+          { id: 'star', emoji: '⭐', name: 'Estrella Fugaz', cost: 100, unlocked: false },
+          { id: 'unicorn', emoji: '🦄', name: 'Unicornio Mágico', cost: 200, unlocked: false },
+          { id: 'rainbow', emoji: '🌈', name: 'Arcoíris Brillante', cost: 300, unlocked: false },
+          { id: 'crown', emoji: '👑', name: 'Corona Real', cost: 500, unlocked: false },
+          { id: 'fairy', emoji: '🧚‍♀️', name: 'Hada Madrina', cost: 800, unlocked: false },
+          { id: 'rocket', emoji: '🚀', name: 'Cohete Espacial', cost: 1000, unlocked: false },
+          { id: 'planet', emoji: '🪐', name: 'Planeta Saturno', cost: 1500, unlocked: false },
+        ];
+
+        const ADHD_MOTIVATIONAL_PHRASES = [
+          "¡Tu cerebro está brillando como una estrella!",
+          "¡Me encanta cómo te estás concentrando!",
+          "¡Tienes un superpoder para los números!",
+          "¡Nada te detiene, eres increíble!",
+          "¡Wow! ¡Tu esfuerzo está dando frutos mágicos!",
+          "¡Sigue así! Tu mente es maravillosa.",
+          "¡Estás haciendo magia con las matemáticas!",
+          "¡Qué enfoque tan genial tienes hoy!",
+          "¡Eres más rápida que un rayo de sol!",
+          "¡Increíble! Estás dominando esto."
+        ];
+
+        const AppState = {
+          WELCOME: 'WELCOME',
+          MODE_SELECT: 'MODE_SELECT',
+          MENU: 'MENU',
+          PLAYING: 'PLAYING',
+          STORE: 'STORE',
+          SUMMARY: 'SUMMARY',
+          GAME_SNAKE: 'GAME_SNAKE',
+          GAME_MEMORY: 'GAME_MEMORY',
+          GAME_CATCH: 'GAME_CATCH',
+          PRACTICE_VIEW: 'PRACTICE_VIEW'
+        };
+
+        const GameMode = {
+            FUN: 'FUN',
+            MONEY: 'MONEY'
+        };
+
+        // --- SERVICIOS (AUDIO Y AI) ---
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const playSoundEffect = (type) => {
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          const now = audioCtx.currentTime;
+
+          if (type === 'correct') {
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(523.25, now);
+            oscillator.frequency.exponentialRampToValueAtTime(1046.5, now + 0.1);
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            oscillator.start(now);
+            oscillator.stop(now + 0.5);
+          } else if (type === 'incorrect') {
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(150, now);
+            oscillator.frequency.linearRampToValueAtTime(100, now + 0.3);
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            oscillator.start(now);
+            oscillator.stop(now + 0.3);
+          } else if (type === 'magic') {
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(400, now);
+            oscillator.frequency.linearRampToValueAtTime(800, now + 0.2);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            oscillator.start(now);
+            oscillator.stop(now + 0.5);
+          } else if (type === 'pop') {
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, now);
+            oscillator.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            oscillator.start(now);
+            oscillator.stop(now + 0.1);
+          } else if (type === 'cash') {
+            // Sonido de caja registradora simplificado
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(1200, now);
+            oscillator.frequency.setValueAtTime(1600, now + 0.1);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+            oscillator.start(now);
+            oscillator.stop(now + 0.4);
+          }
+        };
+
+        const speakText = (text) => {
+          if (!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'es-ES';
+          utterance.rate = 0.9;
+          utterance.pitch = 1.1;
+          const voices = window.speechSynthesis.getVoices();
+          const preferredVoice = voices.find(voice => 
+            voice.lang.includes('es') && (voice.name.includes('Monica') || voice.name.includes('Google') || voice.name.includes('Female'))
+          );
+          if (preferredVoice) utterance.voice = preferredVoice;
+          window.speechSynthesis.speak(utterance);
+        };
+
+        let ai = null;
+        try {
+            if (process.env.API_KEY) {
+                ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            }
+        } catch(e) { console.log("AI not configured"); }
+
+        const getEncouragementMessage = async (score, total, userName, isMoneyMode) => {
+          if (!ai) return isMoneyMode 
+            ? `¡Buen intento en el modo dinero, ${userName}!` 
+            : `¡Increíble trabajo, ${userName}! ¡Conseguiste ${score} de ${total}! 🌟💖`;
+            
+          try {
+            const context = isMoneyMode 
+                ? `La niña ${userName} jugó en "Modo Dinero" contrarreloj. Obtuvo ${score}/${total}.`
+                : `La niña se llama ${userName}. Obtuvo ${score} respuestas correctas de ${total} preguntas.`;
+            const prompt = `Eres un "Hada Madrina de las Matemáticas". Genera un mensaje muy corto, entusiasta y personalizado en Español para felicitarla o animarla. Usa emojis. Máximo 2 frases.\nContexto: ${context}`;
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+            });
+            return response.text || `¡Lo hiciste genial, ${userName}!`;
+          } catch (error) {
+            console.error("Error AI:", error);
+            return `¡Eres una superestrella, ${userName}! 🌟`;
+          }
+        };
+
+        // --- COMPONENTES AUXILIARES ---
+
+        const Confetti = () => {
+          const canvasRef = React.useRef(null);
+          React.useEffect(() => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const particles = [];
+            const colors = ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b'];
+            for (let i = 0; i < 100; i++) {
+              particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height - canvas.height,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                size: Math.random() * 10 + 5,
+                speed: Math.random() * 5 + 2,
+                angle: Math.random() * 360,
+                spin: Math.random() * 10 - 5
+              });
+            }
+
+            let animationId;
+            const animate = () => {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              particles.forEach((p) => {
+                p.y += p.speed;
+                p.angle += p.spin;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.angle * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                ctx.restore();
+                if (p.y > canvas.height) { p.y = -20; p.x = Math.random() * canvas.width; }
+              });
+              animationId = requestAnimationFrame(animate);
+            };
+            animate();
+            const timeout = setTimeout(() => cancelAnimationFrame(animationId), 3000);
+            return () => { cancelAnimationFrame(animationId); clearTimeout(timeout); };
+          }, []);
+          return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-50" />;
+        };
+
+        const VisualAid = ({ num1, num2 }) => {
+          const rows = Array.from({ length: num1 });
+          const cols = Array.from({ length: num2 });
+          return (
+            <div className="bg-white/50 p-4 rounded-xl backdrop-blur-sm border-2 border-purple-100 inline-block mt-4">
+              <p className="text-center text-gray-500 text-sm mb-2 font-bold">Ayuda Visual: {num1} grupos de {num2}</p>
+              <div className="flex flex-col gap-2 items-center">
+                {rows.map((_, rIndex) => (
+                  <div key={`row-${rIndex}`} className="flex gap-2">
+                    {cols.map((_, cIndex) => (
+                      <div key={`dot-${rIndex}-${cIndex}`} className="w-6 h-6 rounded-full bg-purple-400 shadow-sm animate-pulse" style={{ animationDelay: `${(rIndex * num2 + cIndex) * 0.05}s` }}></div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        };
+
+        const GameTimer = ({ duration, onFinish, type = "recess" }) => {
+            const [timeLeft, setTimeLeft] = React.useState(duration);
+            React.useEffect(() => {
+                setTimeLeft(duration);
+            }, [duration]);
+
+            React.useEffect(() => {
+                const timer = setInterval(() => {
+                    setTimeLeft(prev => {
+                        if (prev <= 1) { clearInterval(timer); onFinish(); return 0; }
+                        return prev - 1;
+                    });
+                }, 1000);
+                return () => clearInterval(timer);
+            }, [onFinish]);
+            
+            const formatTime = (s) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
+            const colorClass = type === "recess" ? "bg-purple-800" : "bg-green-600";
+            return <div className={`${colorClass} text-white px-4 py-2 rounded-xl font-mono text-xl shadow-lg`}>⏱️ {formatTime(timeLeft)}</div>;
+        };
+
+        // --- JUEGOS DE RECREO ---
+
+        // 1. Snake Game
+        const SnakeGame = ({ onFinish }) => {
+            const canvasRef = React.useRef(null);
+            const [snake, setSnake] = React.useState([{ x: 10, y: 10 }]);
+            const [food, setFood] = React.useState({ x: 15, y: 15 });
+            const [direction, setDirection] = React.useState({ x: 1, y: 0 });
+            const [gameOver, setGameOver] = React.useState(false);
+            const [score, setScore] = React.useState(0);
+
+            const generateFood = React.useCallback(() => ({
+                x: Math.floor(Math.random() * (window.innerWidth < 500 ? 15 : 20)),
+                y: Math.floor(Math.random() * (window.innerWidth < 500 ? 15 : 20)),
+            }), []);
+
+            React.useEffect(() => {
+                if (gameOver) return;
+                const moveSnake = () => {
+                    setSnake(prevSnake => {
+                        const newHead = { x: prevSnake[0].x + direction.x, y: prevSnake[0].y + direction.y };
+                        const limit = window.innerWidth < 500 ? 15 : 20;
+                        if (newHead.x < 0) newHead.x = limit - 1;
+                        if (newHead.x >= limit) newHead.x = 0;
+                        if (newHead.y < 0) newHead.y = limit - 1;
+                        if (newHead.y >= limit) newHead.y = 0;
+
+                        if (prevSnake.some(s => s.x === newHead.x && s.y === newHead.y)) {
+                            setGameOver(true);
+                            return prevSnake;
+                        }
+
+                        const newSnake = [newHead, ...prevSnake];
+                        if (newHead.x === food.x && newHead.y === food.y) {
+                            setScore(s => s + 1);
+                            setFood(generateFood());
+                        } else {
+                            newSnake.pop();
+                        }
+                        return newSnake;
+                    });
+                };
+                const interval = setInterval(moveSnake, 150);
+                return () => clearInterval(interval);
+            }, [direction, food, gameOver, generateFood]);
+
+            React.useEffect(() => {
+                const handleKey = (e) => {
+                    switch(e.key) {
+                        case 'ArrowUp': if (direction.y === 0) setDirection({x:0, y:-1}); break;
+                        case 'ArrowDown': if (direction.y === 0) setDirection({x:0, y:1}); break;
+                        case 'ArrowLeft': if (direction.x === 0) setDirection({x:-1, y:0}); break;
+                        case 'ArrowRight': if (direction.x === 0) setDirection({x:1, y:0}); break;
+                    }
+                };
+                window.addEventListener('keydown', handleKey);
+                return () => window.removeEventListener('keydown', handleKey);
+            }, [direction]);
+
+            const handleDirection = (dir) => {
+                switch(dir) {
+                    case 'UP': if (direction.y === 0) setDirection({x:0, y:-1}); break;
+                    case 'DOWN': if (direction.y === 0) setDirection({x:0, y:1}); break;
+                    case 'LEFT': if (direction.x === 0) setDirection({x:-1, y:0}); break;
+                    case 'RIGHT': if (direction.x === 0) setDirection({x:1, y:0}); break;
+                }
+            };
+
+            React.useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const limit = window.innerWidth < 500 ? 15 : 20;
+                const cellSize = Math.min(canvas.width, canvas.height) / limit;
+                ctx.fillStyle = '#fce7f3';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(food.x * cellSize + cellSize/2, food.y * cellSize + cellSize/2, cellSize/2 - 2, 0, 2*Math.PI);
+                ctx.fill();
+                snake.forEach((s, i) => {
+                    ctx.fillStyle = i === 0 ? '#6d28d9' : '#8b5cf6';
+                    ctx.fillRect(s.x * cellSize + 1, s.y * cellSize + 1, cellSize - 2, cellSize - 2);
+                });
+            }, [snake, food]);
+
+            return (
+                <div className="fixed inset-0 bg-purple-900 z-50 flex flex-col items-center justify-center p-4">
+                    <div className="text-white flex justify-between w-full max-w-md mb-4 items-center">
+                         <GameTimer duration={180} onFinish={onFinish} type="recess" />
+                         <div className="bg-purple-800 px-4 py-2 rounded-xl">🍎 {score}</div>
+                    </div>
+                    <div className="bg-white rounded-xl shadow-2xl border-4 border-purple-300 relative">
+                        <canvas ref={canvasRef} width={Math.min(window.innerWidth - 40, 400)} height={Math.min(window.innerWidth - 40, 400)} />
+                        {gameOver && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-white rounded-xl">
+                                <h3 className="text-3xl font-bold mb-4">¡Chocaste!</h3>
+                                <button onClick={() => { setSnake([{x:10,y:10}]); setGameOver(false); setScore(0); }} className="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-xl font-bold mb-2">Jugar otra vez</button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-8 max-w-[200px]">
+                        <div></div>
+                        <button onPointerDown={() => handleDirection('UP')} className="bg-white/20 p-4 rounded-xl text-white text-2xl">⬆️</button>
+                        <div></div>
+                        <button onPointerDown={() => handleDirection('LEFT')} className="bg-white/20 p-4 rounded-xl text-white text-2xl">⬅️</button>
+                        <button onPointerDown={() => handleDirection('DOWN')} className="bg-white/20 p-4 rounded-xl text-white text-2xl">⬇️</button>
+                        <button onPointerDown={() => handleDirection('RIGHT')} className="bg-white/20 p-4 rounded-xl text-white text-2xl">➡️</button>
+                    </div>
+                    <button onClick={onFinish} className="mt-4 text-white underline opacity-70">Saltar Recreo</button>
+                </div>
+            );
+        };
+
+        // 2. Memory Game
+        const MemoryGame = ({ onFinish }) => {
+            const [cards, setCards] = React.useState([]);
+            const [flipped, setFlipped] = React.useState([]);
+            const [matched, setMatched] = React.useState([]);
+            const [disabled, setDisabled] = React.useState(false);
+
+            React.useEffect(() => {
+                const emojis = ['🦄', '🐱', '🌈', '⭐', '🧚‍♀️', '🚀', '🎨', '🎸'];
+                const deck = [...emojis, ...emojis]
+                    .sort(() => Math.random() - 0.5)
+                    .map((emoji, id) => ({ id, emoji }));
+                setCards(deck);
+            }, []);
+
+            const handleClick = (id) => {
+                if (disabled || flipped.includes(id) || matched.includes(id)) return;
+                const newFlipped = [...flipped, id];
+                setFlipped(newFlipped);
+                if (newFlipped.length === 2) {
+                    setDisabled(true);
+                    const [first, second] = newFlipped;
+                    if (cards[first].emoji === cards[second].emoji) {
+                        setMatched([...matched, first, second]);
+                        setFlipped([]);
+                        setDisabled(false);
+                        playSoundEffect('magic');
+                    } else {
+                        setTimeout(() => {
+                            setFlipped([]);
+                            setDisabled(false);
+                        }, 1000);
+                    }
+                } else {
+                    playSoundEffect('pop');
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-pink-900 z-50 flex flex-col items-center justify-center p-4">
+                    <div className="flex justify-between w-full max-w-md mb-6 items-center">
+                        <GameTimer duration={180} onFinish={onFinish} type="recess" />
+                        <h2 className="text-white text-2xl font-bold">Memoria Mágica</h2>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3 max-w-md w-full">
+                        {cards.map((card, index) => (
+                            <div key={card.id} onClick={() => handleClick(index)} className={`aspect-square relative cursor-pointer ${matched.includes(index) ? 'opacity-0 pointer-events-none' : ''}`}>
+                                <div className={`w-full h-full transition-all duration-500 transform ${flipped.includes(index) ? 'rotate-y-180' : ''}`}>
+                                    {flipped.includes(index) ? (
+                                        <div className="absolute inset-0 bg-white rounded-xl flex items-center justify-center text-4xl shadow-lg border-4 border-pink-300">
+                                            {card.emoji}
+                                        </div>
+                                    ) : (
+                                        <div className="absolute inset-0 bg-pink-500 rounded-xl flex items-center justify-center text-4xl shadow-lg border-4 border-white">
+                                            ❓
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {matched.length === cards.length && cards.length > 0 && (
+                        <div className="mt-8 text-white font-bold text-2xl animate-bounce">¡Ganaste! 🎉</div>
+                    )}
+                    <button onClick={onFinish} className="mt-8 text-white underline opacity-70">Terminar Recreo</button>
+                </div>
+            );
+        };
+
+        // 3. Catch the Star Game
+        const CatchGame = ({ onFinish }) => {
+            const [score, setScore] = React.useState(0);
+            const [position, setPosition] = React.useState({ top: '50%', left: '50%' });
+
+            const moveStar = () => {
+                const top = Math.floor(Math.random() * 80) + 10 + '%';
+                const left = Math.floor(Math.random() * 80) + 10 + '%';
+                setPosition({ top, left });
+            };
+
+            const catchStar = () => {
+                setScore(s => s + 1);
+                playSoundEffect('magic');
+                moveStar();
+            };
+
+            React.useEffect(() => {
+                const interval = setInterval(moveStar, 2000); // Auto move if too slow
+                return () => clearInterval(interval);
+            }, []);
+
+            return (
+                <div className="fixed inset-0 bg-blue-900 z-50 flex flex-col items-center justify-center overflow-hidden">
+                    <div className="absolute top-4 w-full max-w-md flex justify-between px-4 z-10">
+                        <GameTimer duration={180} onFinish={onFinish} type="recess" />
+                        <div className="bg-blue-800 text-white px-4 py-2 rounded-xl text-xl">⭐ {score}</div>
+                    </div>
+                    <div 
+                        onPointerDown={catchStar}
+                        className="absolute text-6xl cursor-pointer transition-all duration-300 animate-bounce-short select-none"
+                        style={{ top: position.top, left: position.left, transform: 'translate(-50%, -50%)' }}
+                    >
+                        🌟
+                    </div>
+                    <div className="absolute bottom-10 text-white opacity-70">
+                        ¡Atrapa la estrella antes de que se mueva!
+                    </div>
+                    <button onClick={onFinish} className="absolute bottom-4 text-white underline opacity-50 z-10">Saltar</button>
+                </div>
+            );
+        };
+
+        // --- COMPONENTE PRÁCTICA ---
+        const PracticeTables = ({ onBack }) => {
+            const handleHover = (n1, n2) => speakText(`${n1} por ${n2} es igual a ${n1*n2}`);
+            return (
+                <div className="min-h-screen bg-pink-50 p-4 overflow-y-auto">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-lg border-2 border-purple-100 sticky top-0 z-10">
+                            <button onClick={onBack} className="bg-purple-100 hover:bg-purple-200 text-purple-700 font-bold py-2 px-6 rounded-full">← Volver</button>
+                            <h2 className="text-2xl font-black text-purple-600">🗣️ Pasa el ratón para escuchar</h2>
+                            <div className="w-20 hidden md:block"></div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 pb-10">
+                            {[1,2,3,4,5,6,7,8,9,10].map(base => (
+                                <div key={base} className="bg-white rounded-3xl shadow-md overflow-hidden border-4 border-white hover:border-purple-300">
+                                    <div className="bg-purple-500 text-white p-3 text-center font-black text-xl">Tabla del {base}</div>
+                                    <div className="p-4 flex flex-col gap-2">
+                                        {[1,2,3,4,5,6,7,8,9,10].map(m => (
+                                            <div key={m} onMouseEnter={() => handleHover(base, m)} onClick={() => handleHover(base, m)}
+                                                className="p-2 rounded-xl hover:bg-yellow-100 cursor-pointer text-center font-medium text-gray-600 hover:text-purple-700 hover:font-bold border border-transparent hover:border-yellow-300">
+                                                {base} × {m} = {base * m}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const RewardStore = ({ points, rewards, onBuy, onBack }) => (
+            <div className="flex flex-col h-full max-w-4xl mx-auto p-4 fade-in">
+                <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-lg">
+                    <button onClick={onBack} className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2 px-6 rounded-full">← Volver</button>
+                    <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="text-3xl font-bold text-purple-600">{points}</span></div>
+                </div>
+                <div className="text-center mb-6">
+                    <h2 className="text-3xl font-bold text-purple-800">Tienda Mágica</h2>
+                    <p className="text-purple-600">¡Canjea tus diamantes!</p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-20">
+                    {rewards.map(item => (
+                        <div key={item.id} className={`relative p-6 rounded-2xl border-4 flex flex-col items-center justify-between h-48 ${item.unlocked ? 'bg-white border-green-400' : 'bg-gray-50 border-gray-200'}`}>
+                            <div className="text-5xl mb-2">{item.unlocked ? item.emoji : '🔒'}</div>
+                            <h3 className="font-bold text-gray-700 text-center text-sm mb-2">{item.name}</h3>
+                            {item.unlocked ? 
+                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">¡Tuyo!</span> : 
+                                <button onClick={() => onBuy(item)} disabled={points < item.cost} className={`w-full py-2 rounded-xl text-sm font-bold ${points >= item.cost ? 'bg-purple-500 hover:bg-purple-600 text-white shadow-md' : 'bg-gray-200 text-gray-400'}`}>{item.cost} 💎</button>
+                            }
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+
+        // --- APP PRINCIPAL ---
+        const App = () => {
+            const [appState, setAppState] = React.useState(AppState.WELCOME);
+            const [gameMode, setGameMode] = React.useState(GameMode.FUN);
+            
+            const [userStats, setUserStats] = React.useState({ 
+                name: '', 
+                points: 100, 
+                currentStreak: 0, 
+                inventory: [],
+                playedTables: [], // Para Modo Diversión
+                wonTablesMoney: [] // Para Modo Dinero (bloquear al ganar)
+            });
+            const [rewards, setRewards] = React.useState(INITIAL_REWARDS);
+            
+            const [questions, setQuestions] = React.useState([]);
+            const [currentQIdx, setCurrentQIdx] = React.useState(0);
+            const [currentTable, setCurrentTable] = React.useState(0);
+            const [inputAnswer, setInputAnswer] = React.useState('');
+            const [feedback, setFeedback] = React.useState('none');
+            const [showConfetti, setShowConfetti] = React.useState(false);
+            const [aiMessage, setAiMessage] = React.useState('');
+            const [loadingAi, setLoadingAi] = React.useState(false);
+            
+            const [showHelp, setShowHelp] = React.useState(false);
+            const [lastMotivationalMilestone, setLastMotivationalMilestone] = React.useState(100);
+            
+            // Recreo (Solo Modo Diversión)
+            const [nextRecessMilestone, setNextRecessMilestone] = React.useState(200);
+            const [showExitConfirm, setShowExitConfirm] = React.useState(false);
+            const [recessRotationIdx, setRecessRotationIdx] = React.useState(0);
+            const RECESS_GAMES = [AppState.GAME_SNAKE, AppState.GAME_MEMORY, AppState.GAME_CATCH];
+
+            // Modo Dinero
+            const [sessionTimeLeft, setSessionTimeLeft] = React.useState(60); 
+            const [moneyModeStartPoints, setMoneyModeStartPoints] = React.useState(0);
+            const [showDollarNotification, setShowDollarNotification] = React.useState(false);
+
+            // Timer para Modo Dinero
+            React.useEffect(() => {
+                if (appState === AppState.PLAYING && gameMode === GameMode.MONEY && !showExitConfirm && !showDollarNotification) {
+                    const timer = setInterval(() => {
+                        setSessionTimeLeft(prev => {
+                            if (prev <= 1) {
+                                clearInterval(timer);
+                                handleMoneyModeTimeOut();
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                    return () => clearInterval(timer);
+                }
+            }, [appState, gameMode, showExitConfirm, showDollarNotification]);
+
+            // Auto-close Dollar Notification after 15 seconds
+            React.useEffect(() => {
+                if (showDollarNotification) {
+                    const timer = setTimeout(() => {
+                        setShowDollarNotification(false);
+                    }, 15000); // 15 seconds
+                    return () => clearTimeout(timer);
+                }
+            }, [showDollarNotification]);
+
+            const handleMoneyModeTimeOut = () => {
+                playSoundEffect('incorrect');
+                speakText("¡Se acabó el tiempo! Menos diez puntos.");
+                setUserStats(prev => ({ ...prev, points: Math.max(0, prev.points - 10) }));
+                setAppState(AppState.SUMMARY);
+                setAiMessage("El tiempo se agotó. ¡Inténtalo de nuevo para ganar el dólar!");
+            };
+
+            React.useEffect(() => {
+                if (appState === AppState.PLAYING && questions.length > 0 && !showExitConfirm && !showDollarNotification) {
+                    const q = questions[currentQIdx];
+                    setShowHelp(false);
+                    // Solo hablar al inicio de la pregunta si no es reintento
+                    if(feedback !== 'incorrect') {
+                       setTimeout(() => speakText(`${q.num1} por ${q.num2}`), 500);
+                    }
+                }
+            }, [currentQIdx, appState, questions, showExitConfirm, showDollarNotification]);
+
+            const handleNameSubmit = (e) => {
+                e.preventDefault();
+                const name = e.target.name.value.trim();
+                if (name) {
+                    setUserStats(prev => ({ ...prev, name }));
+                    setAppState(AppState.MODE_SELECT);
+                    playSoundEffect('magic');
+                    speakText(`¡Hola ${name}! Elige tu modo de juego.`);
+                }
+            };
+
+            const selectMode = (mode) => {
+                setGameMode(mode);
+                setAppState(AppState.MENU);
+                const modeName = mode === GameMode.FUN ? "Modo Diversión" : "Modo Dinero";
+                speakText(`Entrando en ${modeName}.`);
+            };
+
+            const startSession = (table) => {
+                // Bloqueo Modo Dinero
+                if (gameMode === GameMode.MONEY && userStats.wonTablesMoney.includes(table)) {
+                    speakText("Ya ganaste esta tabla.");
+                    return;
+                }
+
+                setCurrentTable(table);
+                const qs = [];
+                for(let i=0; i<7; i++) {
+                    const n1 = table === 0 ? Math.floor(Math.random()*10)+1 : table;
+                    const n2 = Math.floor(Math.random()*10)+1;
+                    qs.push({ num1: n1, num2: n2, answer: n1*n2 });
+                }
+                setQuestions(qs);
+                setCurrentQIdx(0);
+                setAppState(AppState.PLAYING);
+                setFeedback('none');
+                setInputAnswer('');
+                setShowHelp(false);
+                setAiMessage('');
+                setShowExitConfirm(false);
+                setShowDollarNotification(false);
+
+                // Config Modo Dinero
+                if (gameMode === GameMode.MONEY) {
+                    setSessionTimeLeft(60); // 1 minuto
+                    setMoneyModeStartPoints(userStats.points);
+                }
+            };
+
+            const useHelp = () => {
+                if (showHelp) return;
+                const cost = gameMode === GameMode.MONEY ? 25 : 30;
+                
+                if (userStats.points >= cost) {
+                    setUserStats(prev => ({ ...prev, points: prev.points - cost }));
+                    setShowHelp(true);
+                    playSoundEffect('incorrect');
+                    
+                    if (gameMode === GameMode.MONEY) {
+                        speakText(`Ayuda activada por tres segundos. Menos 25 puntos.`);
+                        setTimeout(() => setShowHelp(false), 3000);
+                    } else {
+                        speakText(`Ayuda activada. Menos 30 diamantes. Aquí tienes la tabla.`);
+                    }
+                } else {
+                    speakText("No tienes suficientes diamantes.");
+                    playSoundEffect('incorrect');
+                }
+            };
+
+            const handleExitRequest = () => {
+                playSoundEffect('incorrect');
+                const penalty = 10;
+                speakText(`Atención. Si sales ahora perderás ${penalty} puntos. ¿Quieres salir?`);
+                setShowExitConfirm(true);
+            };
+            
+            const cancelExit = () => {
+                setShowExitConfirm(false);
+            };
+
+            const confirmExit = () => {
+                setUserStats(prev => ({ ...prev, points: Math.max(0, prev.points - 10), currentStreak: 0 }));
+                setShowExitConfirm(false);
+                setAppState(AppState.MENU);
+                speakText("Saliste del juego. Menos diez puntos.");
+            };
+
+            const triggerRecess = () => {
+                const gameToPlay = RECESS_GAMES[recessRotationIdx];
+                setRecessRotationIdx((prev) => (prev + 1) % RECESS_GAMES.length);
+                
+                setAppState(gameToPlay);
+                let gameName = "recreo";
+                if(gameToPlay === AppState.GAME_SNAKE) gameName = "el juego de la serpiente";
+                if(gameToPlay === AppState.GAME_MEMORY) gameName = "memoria mágica";
+                if(gameToPlay === AppState.GAME_CATCH) gameName = "atrapa la estrella";
+                
+                playSoundEffect('magic');
+                speakText(`¡Tiempo de recreo! Vamos a jugar a ${gameName}.`);
+            };
+
+            const handleAnswer = (e) => {
+                e.preventDefault();
+                if (!inputAnswer) return;
+                const val = parseInt(inputAnswer);
+                const q = questions[currentQIdx];
+
+                if (val === q.answer) {
+                    // --- RESPUESTA CORRECTA ---
+                    setFeedback('correct');
+                    setShowConfetti(true);
+                    playSoundEffect('correct');
+                    
+                    // Cálculo de Puntos
+                    let earned = 0;
+                    if (gameMode === GameMode.FUN) {
+                        const alreadyPlayed = userStats.playedTables.includes(currentTable);
+                        if (!alreadyPlayed) {
+                             if ([1, 2, 10].includes(currentTable)) earned = 3;
+                             else earned = 8;
+                        }
+                    } else {
+                        // Modo Dinero
+                        if ([1, 2, 5, 10].includes(currentTable)) earned = 2;
+                        else earned = 8;
+                    }
+
+                    // Actualizar Puntos
+                    setUserStats(prev => {
+                        const newPoints = prev.points + earned;
+                        
+                        // Lógica Mensajes (Solo se ejecuta aquí para Modo Diversión o chequeos inmediatos)
+                        // Para Modo Dinero el mensaje de dólar se verifica tras la actualización
+                        if (gameMode === GameMode.FUN) {
+                            const prevMotivMilestone = Math.floor(lastMotivationalMilestone / 40);
+                            const currMotivMilestone = Math.floor(newPoints / 40);
+                            if (currMotivMilestone > prevMotivMilestone && earned > 0) {
+                                const ph = ADHD_MOTIVATIONAL_PHRASES[Math.floor(Math.random()*ADHD_MOTIVATIONAL_PHRASES.length)];
+                                setLastMotivationalMilestone(newPoints);
+                                setTimeout(() => speakText(`¡Fantástico! ${ph}`), 1000);
+                            }
+                            if (prev.points < 150 && newPoints >= 150) {
+                                setTimeout(() => speakText(`¡Guau! ¡${prev.name}, ya tienes ciento cincuenta diamantes! ¡Sigue así!`), 2500);
+                            }
+                        }
+
+                        // Lógica Dólar (Modo Dinero)
+                        if (gameMode === GameMode.MONEY) {
+                             const prevDollars = Math.floor(prev.points / 100);
+                             const newDollars = Math.floor(newPoints / 100);
+                             if (newDollars > prevDollars) {
+                                 setTimeout(() => {
+                                     playSoundEffect('cash');
+                                     speakText("¡Felicidades, ganaste un dólar! Dile a papá o mamá que vea tus puntos.");
+                                     // Mostrar notificación visual solo si >= 200 puntos
+                                     if (newPoints >= 200) {
+                                         setShowDollarNotification(true);
+                                     }
+                                 }, 1000);
+                             }
+                        }
+
+                        return { ...prev, points: newPoints, currentStreak: prev.currentStreak + 1 };
+                    });
+
+                    // Transición o Recreo
+                    setTimeout(() => {
+                        // Recreo SOLO en Modo Diversión
+                        if (gameMode === GameMode.FUN) {
+                            setUserStats(currentStats => {
+                                if (currentStats.points >= nextRecessMilestone) {
+                                    setNextRecessMilestone(prev => prev + 80);
+                                    triggerRecess();
+                                    return currentStats; 
+                                }
+                                proceedToNextQuestion();
+                                return currentStats;
+                            });
+                        } else {
+                            // Modo Dinero
+                            // Si se muestra la notificación de dólar, NO avanzamos automáticamente hasta que la cierren.
+                            // Pero como setShowDollarNotification es asíncrono y se basa en el timeout,
+                            // necesitamos una manera de saber si va a suceder.
+                            // Simplificación: proceedToNextQuestion se ejecutará, pero si showDollarNotification se activa,
+                            // el render mostrará el modal y "tapará" la siguiente pregunta, pausando el timer.
+                            proceedToNextQuestion();
+                        }
+                    }, 1500);
+
+                } else {
+                    // --- RESPUESTA INCORRECTA ---
+                    setFeedback('incorrect');
+                    playSoundEffect('incorrect');
+                    
+                    if (gameMode === GameMode.FUN) {
+                        speakText("Oh no, inténtalo de nuevo.");
+                        setUserStats(prev => ({ ...prev, currentStreak: 0, points: Math.max(0, prev.points - 10) }));
+                        // En Modo Diversión se queda esperando corrección pero ya restó puntos
+                    } else {
+                        // Modo Dinero
+                        speakText("Incorrecto. Menos quince puntos.");
+                        setUserStats(prev => ({ ...prev, points: Math.max(0, prev.points - 15) }));
+                    }
+                }
+            };
+
+            const proceedToNextQuestion = () => {
+                setShowConfetti(false);
+                const updatedQs = [...questions];
+                updatedQs[currentQIdx].userAnswer = parseInt(inputAnswer);
+                updatedQs[currentQIdx].isCorrect = true;
+                setQuestions(updatedQs);
+
+                if (currentQIdx < questions.length - 1) {
+                    setCurrentQIdx(p => p + 1);
+                    setFeedback('none');
+                    setInputAnswer('');
+                } else {
+                    finishSession(updatedQs);
+                }
+            };
+
+            const finishRecess = () => {
+                setAppState(AppState.PLAYING);
+                speakText("¡Recreo terminado! Volvemos a las matemáticas.");
+                proceedToNextQuestion();
+            };
+
+            const finishSession = async (finalQs) => {
+                let bonus = 0;
+                // Lógica de finalización por modo
+                if (gameMode === GameMode.MONEY) {
+                    bonus = 10;
+                    setUserStats(prev => ({
+                        ...prev, 
+                        points: prev.points + 10,
+                        wonTablesMoney: [...prev.wonTablesMoney, currentTable]
+                    }));
+                    speakText("¡Terminaste a tiempo! Diez puntos extra.");
+                } else {
+                    setUserStats(prev => {
+                        if (!prev.playedTables.includes(currentTable)) {
+                            return { ...prev, playedTables: [...prev.playedTables, currentTable] };
+                        }
+                        return prev;
+                    });
+                }
+
+                setAppState(AppState.SUMMARY);
+                setLoadingAi(true);
+                playSoundEffect('magic');
+                const correct = finalQs.filter(q => q.isCorrect).length;
+                const msg = await getEncouragementMessage(correct, finalQs.length, userStats.name, gameMode === GameMode.MONEY);
+                setAiMessage(msg);
+                speakText(msg);
+                setLoadingAi(false);
+            };
+
+            const buyItem = (item) => {
+                if (userStats.points >= item.cost && !item.unlocked) {
+                    setUserStats(prev => ({ ...prev, points: prev.points - item.cost, inventory: [...prev.inventory, item.id] }));
+                    setRewards(prev => prev.map(r => r.id === item.id ? { ...r, unlocked: true } : r));
+                    setShowConfetti(true);
+                    playSoundEffect('magic');
+                    setTimeout(() => setShowConfetti(false), 2000);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-pink-50 selection:bg-purple-200">
+                    {appState === AppState.WELCOME && (
+                        <div className="flex flex-col items-center justify-center min-h-screen p-4 fade-in">
+                            <div className="bg-white p-8 rounded-[2rem] shadow-xl w-full max-w-md border-4 border-purple-200 text-center">
+                                <div className="text-6xl mb-6">🧚‍♀️</div>
+                                <h1 className="text-3xl font-black text-purple-600 mb-2">¡Bienvenida!</h1>
+                                <p className="text-gray-600 mb-8 font-medium">¿Cómo te llamas?</p>
+                                <form onSubmit={handleNameSubmit} className="flex flex-col gap-4">
+                                    <input name="name" type="text" placeholder="Tu nombre..." className="w-full text-center text-2xl font-bold py-4 rounded-xl border-4 border-gray-200 outline-none text-purple-800" autoFocus autoComplete="off" required />
+                                    <button type="submit" className="bg-purple-500 hover:bg-purple-600 text-white font-bold text-xl py-4 rounded-xl shadow-lg mt-2">Siguiente ➜</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {appState === AppState.MODE_SELECT && (
+                        <div className="flex flex-col items-center justify-center min-h-screen p-4 fade-in gap-6">
+                            <h2 className="text-4xl font-black text-purple-600 mb-4 text-center">Elige tu Aventura</h2>
+                            <button onClick={() => selectMode(GameMode.FUN)} className="bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white p-8 rounded-[2rem] shadow-2xl w-full max-w-md transform hover:scale-105 transition-transform border-4 border-white">
+                                <div className="text-6xl mb-2">🎢</div>
+                                <div className="text-3xl font-black">Modo Diversión</div>
+                                <p className="text-pink-100 mt-2 font-bold">¡Juega, aprende y ten recreos!</p>
+                            </button>
+                            <button onClick={() => selectMode(GameMode.MONEY)} className="bg-gradient-to-r from-green-400 to-teal-500 hover:from-green-500 hover:to-teal-600 text-white p-8 rounded-[2rem] shadow-2xl w-full max-w-md transform hover:scale-105 transition-transform border-4 border-white">
+                                <div className="text-6xl mb-2">💰</div>
+                                <div className="text-3xl font-black">Modo Dinero</div>
+                                <p className="text-green-100 mt-2 font-bold">¡Gana dólares contrarreloj!</p>
+                            </button>
+                        </div>
+                    )}
+                    
+                    {appState === AppState.MENU && (
+                        <div className="flex flex-col items-center justify-center min-h-screen p-4 space-y-8 fade-in">
+                            <header className="text-center">
+                                <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-500 mb-4">MathMagica</h1>
+                                <p className="text-xl text-purple-700 font-medium">¡Hola {userStats.name}!</p>
+                                <div className="mt-2 inline-block px-4 py-1 rounded-full bg-white border border-purple-100 text-sm font-bold text-purple-400">
+                                    {gameMode === GameMode.FUN ? "🎢 Modo Diversión" : "💰 Modo Dinero"}
+                                </div>
+                            </header>
+                            <div className="bg-white p-6 rounded-3xl shadow-xl w-full max-w-2xl border-4 border-white/50">
+                                <h2 className="text-2xl font-bold text-center text-gray-700 mb-6">Elige una Tabla</h2>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                                    {[1,2,3,4,5,6,7,8,9,10].map(num => {
+                                        const isLocked = gameMode === GameMode.MONEY && userStats.wonTablesMoney.includes(num);
+                                        return (
+                                            <button key={num} onClick={() => startSession(num)} disabled={isLocked} 
+                                                className={`relative font-black text-2xl py-4 rounded-2xl border-b-4 transition-all
+                                                    ${isLocked 
+                                                        ? 'bg-green-100 text-green-400 border-green-200 cursor-not-allowed' 
+                                                        : 'bg-purple-100 hover:bg-purple-200 text-purple-700 border-purple-200'}`}>
+                                                x{num}
+                                                {isLocked && <div className="absolute top-1 right-1 text-xs">✅</div>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-6 border-t-2 border-gray-100 pt-6">
+                                    <button onClick={() => setAppState(AppState.PRACTICE_VIEW)} className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 text-white font-black text-xl py-4 rounded-2xl shadow-lg">🎲 Repasar Tablas</button>
+                                </div>
+                            </div>
+                            <button onClick={() => setAppState(AppState.STORE)} className="w-full max-w-2xl bg-white text-pink-500 font-bold py-4 rounded-2xl shadow-lg border-2 border-pink-100 flex items-center justify-center gap-3">
+                                <span className="text-3xl">🎁</span>
+                                <div className="text-left"><div className="text-xs uppercase text-pink-400">Puntos</div><div className="text-2xl">{userStats.points} 💎</div></div>
+                            </button>
+                            <button onClick={() => setAppState(AppState.MODE_SELECT)} className="text-gray-400 font-bold text-sm underline hover:text-purple-500">Cambiar de Modo</button>
+                        </div>
+                    )}
+
+                    {appState === AppState.PLAYING && questions[currentQIdx] && (
+                        <div className="flex flex-col items-center justify-center min-h-screen p-4 fade-in relative">
+                            {showConfetti && <Confetti />}
+                            {gameMode === GameMode.MONEY && (
+                                <div className="absolute top-4 right-4">
+                                    <GameTimer duration={sessionTimeLeft} onFinish={() => {}} type="game" />
+                                </div>
+                            )}
+                            <div className="w-full max-w-md h-4 bg-gray-200 rounded-full mb-8 overflow-hidden border-2 border-white">
+                                <div className="h-full bg-gradient-to-r from-pink-400 to-purple-500 transition-all duration-500" style={{ width: `${(currentQIdx / questions.length) * 100}%` }} />
+                            </div>
+                            <div className="bg-white p-8 rounded-[3rem] shadow-2xl w-full max-w-md text-center border-8 border-purple-50 relative">
+                                <button onClick={handleExitRequest} className="absolute top-6 right-6 text-gray-300 hover:text-red-400 font-bold text-xl">✕</button>
+                                <div className="mb-2 text-purple-400 font-bold text-sm tracking-widest uppercase">Pregunta {currentQIdx + 1} de {questions.length}</div>
+                                <div className="text-7xl font-black text-gray-800 mb-8 font-mono">{questions[currentQIdx].num1} × {questions[currentQIdx].num2}</div>
+                                
+                                {gameMode === GameMode.FUN && (userStats.playedTables.includes(currentTable)) && (
+                                    <div className="mb-4 text-xs text-orange-500 font-bold bg-orange-100 p-2 rounded-lg">
+                                        ⚠️ Ya completaste esta tabla. No ganarás puntos esta vez.
+                                    </div>
+                                )}
+
+                                <form onSubmit={handleAnswer} className="flex flex-col gap-4">
+                                    <input type="number" inputMode="numeric" value={inputAnswer} onChange={(e) => { setFeedback('none'); setInputAnswer(e.target.value); }}
+                                        className={`w-full text-center text-4xl font-bold py-4 rounded-2xl border-4 outline-none ${feedback === 'correct' ? 'border-green-400 bg-green-50' : feedback === 'incorrect' ? 'border-red-400 bg-red-50 shake' : 'border-gray-200'}`} placeholder="?" autoFocus />
+                                    <button type="submit" className="bg-purple-500 hover:bg-purple-600 text-white font-bold text-xl py-4 rounded-2xl shadow-lg mt-4">Comprobar ✨</button>
+                                </form>
+                                <div className="mt-6 flex justify-center">
+                                    <button type="button" onClick={useHelp} disabled={showHelp || userStats.points < (gameMode === GameMode.MONEY ? 25 : 30)} className={`py-2 px-4 rounded-full font-bold text-sm flex items-center gap-2 ${showHelp ? 'bg-gray-100' : 'bg-yellow-100 text-yellow-700'}`}>💡 {showHelp ? 'Ayuda usada' : `Usar Ayuda (-${gameMode === GameMode.MONEY ? 25 : 30} 💎)`}</button>
+                                </div>
+                                {showHelp && (
+                                    <div className="mt-4 p-4 bg-yellow-50 rounded-xl border-2 border-yellow-200 fade-in">
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600 font-mono">
+                                            {[1,2,3,4,5,6,7,8,9,10].map(m => (
+                                                <div key={m} className={m === questions[currentQIdx].num2 ? "font-bold text-purple-600 bg-purple-100 rounded px-1" : ""}>{questions[currentQIdx].num1} × {m} = {questions[currentQIdx].num1 * m}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {feedback === 'incorrect' && (
+                                    <div className="mt-6">
+                                        {gameMode === GameMode.FUN ? (
+                                            <>
+                                            <p className="text-red-500 font-bold mb-2">¡Casi! Pierdes 10 gemas.</p>
+                                            <VisualAid num1={questions[currentQIdx].num1} num2={questions[currentQIdx].num2} />
+                                            </>
+                                        ) : (
+                                            <p className="text-red-500 font-bold">¡Inténtalo de nuevo! (-15 puntos)</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Modal de confirmación de salida */}
+                            {showExitConfirm && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-[3rem] z-50 p-4">
+                                    <div className="bg-white p-6 rounded-2xl text-center shadow-2xl animate-bounce-short">
+                                        <div className="text-4xl mb-2">⚠️</div>
+                                        <h3 className="text-xl font-bold text-red-500 mb-2">¿Segura que quieres salir?</h3>
+                                        <p className="text-gray-600 mb-4">Si sales ahora, perderás <strong>10 diamantes</strong>.</p>
+                                        <div className="flex gap-4 justify-center">
+                                            <button onClick={cancelExit} className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-xl">Quedarme</button>
+                                            <button onClick={confirmExit} className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-xl">Salir (-10 💎)</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Modal de Dólar (Modo Dinero >= 200 puntos) */}
+                            {showDollarNotification && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-[3rem] z-50 p-4">
+                                    <div className="bg-white p-6 rounded-2xl text-center shadow-2xl animate-bounce-short border-4 border-green-400">
+                                        <div className="text-6xl mb-2">💵</div>
+                                        <h3 className="text-2xl font-black text-green-600 mb-2">¡Felicidades!</h3>
+                                        <p className="text-xl font-bold text-gray-700 mb-4">Ganaste un dólar</p>
+                                        <p className="text-gray-600 mb-6">Dile a papá o mamá que vea tus puntos.</p>
+                                        <button onClick={() => setShowDollarNotification(false)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-xl text-xl shadow-lg">Continuar</button>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    )}
+
+                    {appState === AppState.SUMMARY && (
+                        <div className="flex flex-col items-center justify-center min-h-screen p-4 fade-in">
+                            {showConfetti && <Confetti />}
+                            <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md text-center border-4 border-yellow-200">
+                                <div className="text-6xl mb-4">🏆</div>
+                                <h2 className="text-3xl font-black text-gray-800 mb-4">¡Sesión Terminada!</h2>
+                                <div className="bg-purple-50 p-6 rounded-2xl mb-6">
+                                    <p className="text-gray-600 mb-2">Total Diamantes</p>
+                                    <div className="text-5xl font-bold text-purple-600">{userStats.points} 💎</div>
+                                </div>
+                                {loadingAi ? <div className="text-purple-400 animate-pulse mb-6">✨ Escribiendo mensaje...</div> : <div className="bg-pink-100 p-4 rounded-xl text-pink-700 font-medium mb-8">"{aiMessage}"</div>}
+                                <button onClick={() => setAppState(AppState.MENU)} className="w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold py-4 rounded-xl text-xl shadow-md">Volver al Menú</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {appState === AppState.GAME_SNAKE && <SnakeGame onFinish={finishRecess} />}
+                    {appState === AppState.GAME_MEMORY && <MemoryGame onFinish={finishRecess} />}
+                    {appState === AppState.GAME_CATCH && <CatchGame onFinish={finishRecess} />}
+                    {appState === AppState.PRACTICE_VIEW && <PracticeTables onBack={() => setAppState(AppState.MENU)} />}
+                    {appState === AppState.STORE && <RewardStore points={userStats.points} rewards={rewards} onBuy={buyItem} onBack={() => setAppState(AppState.MENU)} />}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
