@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LeoAventuras 4</title>
+    <title>LeoAventuras 5 - Mi Jardín</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -57,7 +57,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile, Ear, Info } from 'lucide-react';
+      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile, Ear, Info, Lock } from 'lucide-react';
       import { GoogleGenAI, Type } from "@google/genai";
       import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -87,7 +87,7 @@
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
-            const base64String = reader.result.split(',')[1]; // Remover el prefijo data:audio/xyz;base64,
+            const base64String = reader.result.split(',')[1];
             resolve(base64String);
           };
           reader.onerror = reject;
@@ -98,11 +98,11 @@
       // Función helper para TTS (Texto a Voz)
       const speakText = (text, onEnd) => {
         if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel(); // Detener cualquier audio previo
+          window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'es-ES'; // Español
-          utterance.rate = 0.9; // Un poco más lento para niños
-          utterance.pitch = 1.1; // Un poco más agudo/amigable
+          utterance.lang = 'es-ES';
+          utterance.rate = 0.8; // Más lento para el método silábico
+          utterance.pitch = 1.1;
           
           if (onEnd) {
             utterance.onend = onEnd;
@@ -115,36 +115,40 @@
         }
       };
 
-      const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en alfabetización inicial (método silábico tipo "Libro Mi Jardín" o "Coquito") y TDAH.
-      Tu objetivo es crear contenido de lectura progresivo, altamente estructurado y repetitivo para reforzar el aprendizaje fonético.
-      
-      ESTILO DE ESCRITURA:
-      - Usa frases cortas y simples.
-      - Repetición de sonidos clave (Ej: "Mi mamá me ama. Amo a mi mamá.").
-      - Lenguaje positivo y alentador.
-      - Temas clásicos: Familia, Escuela, Animales, Juegos.`;
+      const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en el método de lectura "Mi Jardín" (fonético-silábico).
+      Tu tarea es generar lecturas estrictamente limitadas a las letras permitidas en cada lección.
+      NO DEBES usar letras que el niño no haya aprendido aún en el nivel solicitado.
+      Usa frases cortas, repetitivas y muy sonoras.`;
 
-      const generateReadingMaterial = async (level, interests = "general") => {
-        const levelPrompts = {
-          1: "NIVEL INICIAL (SÍLABAS DIRECTAS): Enfócate EXCLUSIVAMENTE en letras M, P, S, L y vocales. Ejemplo: 'Mi mamá. Ese oso. La loma'. Frases de sujeto + verbo. No uses palabras complejas.",
-          2: "NIVEL BÁSICO (CONSONANTES T, D, N + INVERSAS): Introduce T, D, N. Frases tipo: 'Tito toma té'. 'El dado de papá'. 'La nena me saluda'. Oraciones de 4-5 palabras.",
-          3: "NIVEL INTERMEDIO (TEXTOS CORTOS MI JARDÍN): Pequeños párrafos sobre situaciones cotidianas. Uso de R, F, B, V. Ejemplo: 'La familia pasea. El perro corre rápido. Veo una flor bonita.'",
-          4: "NIVEL AVANZADO (FÁBULAS CORTAS): Historias con inicio, nudo y desenlace simple. Vocabulario más variado incluyendo sílabas trabadas (pla, bra, etc). Temas: Amistad, Valores.",
-          5: "NIVEL EXPERTO (LECTURA FLUIDA): Textos informativos interesantes o cuentos completos adecuados para 10 años. Párrafos más largos."
-        };
+      // Definición de niveles según el libro Mi Jardín (Páginas 4 a 20 aprox)
+      const BOOK_LEVELS = {
+        1: { name: "Las Vocales", prompt: "Solo usa vocales (a, e, i, o, u). Palabras como: a, e, i, o, u. Frases muy simples o listado de vocales.", letters: "a,e,i,o,u" },
+        2: { name: "La M de Mamá", prompt: "Usa SOLO vocales y la letra M. Palabras: mamá, ama, mima, emo, mío, miau. Frases: 'mi mamá me ama', 'amo a mi mamá'.", letters: "m" },
+        3: { name: "La P de Papá", prompt: "Usa SOLO vocales, M y P. Palabras: papá, pipa, puma, mapa, pepa. Frases: 'mi papá ama a mamá', 'pepe mima a pipo'.", letters: "m,p" },
+        4: { name: "La L de Loma", prompt: "Usa SOLO vocales, M, P y L. Palabras: loma, pila, pala, ala, ola, lulu. Frases: 'la pala de papá', 'lola lee', 'la mula'.", letters: "m,p,l" },
+        5: { name: "La S de Sapo", prompt: "Usa SOLO vocales, M, P, L y S. Palabras: sapo, sopa, sala, mesa, oso, sol. Frases: 'ese oso pasea', 'susi sale sola', 'la mesa es de mamá'.", letters: "m,p,l,s" },
+        6: { name: "La T de Tomate", prompt: "Usa SOLO vocales, M, P, L, S y T. Palabras: tomate, moto, pato, tapa, tío. Frases: 'tito toma té', 'toma la pelota', 'la moto de mi tío'.", letters: "m,p,l,s,t" },
+        7: { name: "La N de Nena", prompt: "Usa SOLO vocales, M, P, L, S, T y N. Palabras: nena, nene, mano, luna, pino. Frases: 'la nena pasea', 'el nene no come'.", letters: "m,p,l,s,t,n" },
+        8: { name: "La D de Dado", prompt: "Usa SOLO vocales, M, P, L, S, T, N y D. Palabras: dado, dedo, duda, día, lado. Frases: 'dame el dado', 'me duele el dedo', 'adela saluda'.", letters: "m,p,l,s,t,n,d" },
+        9: { name: "La C (ca, co, cu)", prompt: "Usa SOLO vocales, M, P, L, S, T, N, D y C (sonido fuerte). Palabras: casa, coco, cama, cuna, saco, poco. Frases: 'paco come coco', 'la casa es bonita'.", letters: "m,p,l,s,t,n,d,c" },
+        10: { name: "La B de Bebé", prompt: "Usa letras aprendidas + B. Palabras: bebé, bola, bata, lobo, sube. Frases: 'el bebé bebe', 'la bola sube'.", letters: "m,p,l,s,t,n,d,c,b" },
+        11: { name: "La V de Vaca", prompt: "Usa letras aprendidas + V. Palabras: vaca, uva, pavo, nave. Frases: 'la vaca de papá', 'el pavo es un ave'.", letters: "m,p,l,s,t,n,d,c,b,v" },
+        12: { name: "Repaso: Ya sé leer", prompt: "Texto celebratorio usando todas las letras anteriores. Párrafos cortos de 3 líneas. 'Ya sé leer. Mi mamá me felicita'.", letters: "todas las anteriores" }
+      };
 
+      const generateReadingMaterial = async (level) => {
+        const lesson = BOOK_LEVELS[level] || BOOK_LEVELS[1];
+        
         const prompt = `Genera una lección de lectura estilo libro "Mi Jardín".
-        Nivel: ${level} (${levelPrompts[level]}).
-        Tema sugerido: ${interests}.
+        Nivel: ${level} - ${lesson.name}.
+        Restricción Estricta de Letras: Solo puedes usar vocales y: ${lesson.letters}.
+        Instrucción Específica: ${lesson.prompt}.
         
         Devuelve un JSON con:
-        - title: Título simple (Ej: "La M de Mamá", "El Oso Pepe").
-        - content: El texto a leer. Debe ser rítmico y fonético.
-        - theme: El tema principal.
-        - questions: Array de 3 preguntas. 
-            1. Literal (dato explícito).
-            2. Inferencial (deducción simple).
-            3. Crítica/Opinión.
+        - title: Título simple (Ej: "Lección de la M").
+        - content: El texto a leer. Debe ser rítmico, repetitivo y silábico. Separa oraciones con puntos.
+        - theme: La letra o sílaba principal (Ej: "ma, me, mi, mo, mu").
+        - questions: Array de 3 preguntas muy sencillas (Literal, Inferencial, Visual).
           Cada pregunta debe tener 'question', 'options' (3 opciones) y 'correctIndex'.`;
 
         try {
@@ -183,28 +187,16 @@
           throw new Error("No text returned from Gemini");
         } catch (error) {
           console.error("Error generating content:", error);
-          // Fallback en caso de error
+          // Fallback en caso de error para Nivel 2 (M) como ejemplo seguro
           return {
-            id: "fallback-1",
-            title: "Mi Mamá",
-            content: "Mi mamá me ama. Amo a mi mamá. Mi mamá me mima. Ema ama a mamá.",
-            theme: "Letra M",
+            id: "fallback-m",
+            title: "Mamá me ama",
+            content: "Mi mamá me ama. Amo a mi mamá. Mi mamá me mima. Mimo a mamá.",
+            theme: "ma, me, mi, mo, mu",
             questions: [
-              {
-                question: "¿Quién me ama?",
-                options: ["El oso", "Mi mamá", "La mesa"],
-                correctIndex: 1
-              },
-              {
-                  question: "¿A quién ama Ema?",
-                  options: ["A mamá", "A papá", "A la sopa"],
-                  correctIndex: 0
-              },
-               {
-                  question: "¿Cómo es mi mamá?",
-                  options: ["Buena", "Mala", "Alta"],
-                  correctIndex: 0
-              }
+              { question: "¿Quién me ama?", options: ["Papá", "Mamá", "El oso"], correctIndex: 1 },
+              { question: "¿A quién amo?", options: ["A mi mamá", "A la mesa", "A la sopa"], correctIndex: 0 },
+              { question: "¿Qué hace mamá?", options: ["Me mima", "Corre", "Salta"], correctIndex: 0 }
             ]
           };
         }
@@ -213,38 +205,27 @@
       const evaluateReadingSession = async (originalText, transcript, durationSeconds, quizScore, totalQuestions, audioBase64) => {
         try {
           const parts = [];
-          
-          // Si tenemos audio, lo enviamos para un análisis real de tono y fluidez
           if (audioBase64) {
              parts.push({
                inlineData: {
-                 mimeType: "audio/webm", // O 'audio/mp3' dependiendo del navegador, pero webm es standard para MediaRecorder
+                 mimeType: "audio/webm",
                  data: audioBase64
                }
              });
           }
 
           parts.push({
-            text: `Evalúa la lectura de un niño de 10 años con TDAH.
-            
-            CONTEXTO:
-            - Texto Original: "${originalText}"
-            - Duración: ${durationSeconds} segundos.
-            - Comprensión (Quiz): ${quizScore}/${totalQuestions}.
+            text: `Actúa como un maestro de primer grado corrigiendo lectura silábica.
+            Texto Original: "${originalText}"
+            Transcripción del niño: "${transcript}"
             
             TAREA:
-            1. Escucha el audio (si está disponible) y compara con el texto original.
-            2. Detecta errores específicos de palabras (mal pronunciadas, omitidas, sustituidas).
-            3. Evalúa tono, fluidez y certeza.
+            1. Compara PALABRA POR PALABRA.
+            2. Genera un mensaje de audio ('spokenFeedback') que diga EXACTAMENTE en qué palabra falló.
+            3. Si sustituyó una palabra (ej: dijo 'come' en vez de 'corre'), dímelo explícitamente.
+            4. Sé muy motivador pero riguroso con la fonética.
             
-            OUTPUT REQUERIDO:
-            Genera un 'spokenFeedback' para que el sistema lo lea en voz alta al niño.
-            REGLA DE ORO PARA SPOKEN FEEDBACK: 
-            - ANALIZA PALABRA POR PALABRA. Si el niño sustituyó o pronunció mal una palabra, TU RESPUESTA DE VIVA VOZ DEBE DECIR EXPLÍCITAMENTE: "En lugar de [palabra correcta], dijiste [palabra incorrecta]".
-            - Ejemplo: "Cuidado, en la frase 'el perro corre', dijiste 'el perro come'".
-            - Sé amable pero MUY ESPECÍFICO con el error exacto.
-            
-            Devuelve JSON.`
+            Output JSON.`
           });
 
           const response = await ai.models.generateContent({
@@ -257,8 +238,8 @@
                 properties: {
                   overallScore: { type: Type.NUMBER },
                   wpm: { type: Type.NUMBER },
-                  diagnosticFeedback: { type: Type.STRING, description: "Evaluación técnica detallada." },
-                  spokenFeedback: { type: Type.STRING, description: "Mensaje verbal amable indicando la palabra exacta del error." },
+                  diagnosticFeedback: { type: Type.STRING },
+                  spokenFeedback: { type: Type.STRING, description: "Feedback verbal específico sobre errores de palabras." },
                   metrics: {
                     type: Type.OBJECT,
                     properties: {
@@ -282,16 +263,16 @@
           console.error(e);
           return { 
             overallScore: 8, 
-            wpm: Math.round((originalText.split(' ').length / durationSeconds) * 60), 
-            diagnosticFeedback: "Has leído muy bien, con buena velocidad. Intenta dar más entonación a las preguntas.",
-            spokenFeedback: "¡Buen trabajo! Sigue practicando las pausas.",
+            wpm: 20, 
+            diagnosticFeedback: "Lectura completada.",
+            spokenFeedback: "¡Bien hecho! Sigue practicando las sílabas.",
             metrics: {
-              precision: { score: 8, feedback: "Muy preciso." },
-              fluency: { score: 7, feedback: "Buen ritmo." },
-              tone: { score: 7, feedback: "Intenta ser más expresivo." },
-              comprehension: { score: quizScore > 1 ? 9 : 6, feedback: "Entendiste la historia." },
-              attention: { score: 8, feedback: "Enfocado." },
-              memory: { score: 7, feedback: "Buena memoria." }
+              precision: { score: 8, feedback: "Bien." },
+              fluency: { score: 7, feedback: "Ritmo constante." },
+              tone: { score: 7, feedback: "Bien." },
+              comprehension: { score: 8, feedback: "Bien." },
+              attention: { score: 8, feedback: "Bien." },
+              memory: { score: 7, feedback: "Bien." }
             }
           };
         }
@@ -300,7 +281,6 @@
       // --- 2. COMPONENTES ---
 
       const ReadingView = ({ material, onComplete, onRequestBreak }) => {
-        // Estados: READING -> QUIZ -> ANALYZING -> COMPARISON -> RESULTS
         const [viewState, setViewState] = useState('READING'); 
         const [isRecording, setIsRecording] = useState(false);
         const [transcript, setTranscript] = useState('');
@@ -318,16 +298,13 @@
 
         useEffect(() => {
           return () => {
-             // Cleanup audio url
              if (audioUrl) URL.revokeObjectURL(audioUrl);
              window.speechSynthesis.cancel();
           }
         }, [audioUrl]);
 
-        // Reproducir feedback automáticamente al llegar a la comparación
         useEffect(() => {
             if (viewState === 'COMPARISON' && evaluation?.spokenFeedback) {
-                // Pequeño delay para que la UI cargue
                 setTimeout(() => {
                     speakText(evaluation.spokenFeedback);
                 }, 500);
@@ -336,7 +313,6 @@
 
         const startRecording = async () => {
            try {
-              // 1. Configurar MediaRecorder para audio real
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
               mediaRecorderRef.current = new MediaRecorder(stream);
               audioChunksRef.current = [];
@@ -352,14 +328,11 @@
                  setAudioBlob(blob);
                  const url = URL.createObjectURL(blob);
                  setAudioUrl(url);
-                 
-                 // Stop all tracks
                  stream.getTracks().forEach(track => track.stop());
               };
 
               mediaRecorderRef.current.start();
 
-              // 2. Configurar SpeechRecognition para transcripción texto (si está soportado)
               const { webkitSpeechRecognition, SpeechRecognition } = window;
               const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition;
 
@@ -370,21 +343,15 @@
                 recognitionRef.current.lang = 'es-ES';
 
                 recognitionRef.current.onresult = (event) => {
-                  let interimTranscript = '';
-                  let finalTranscript = '';
+                  let transcriptData = '';
                   for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                      finalTranscript += event.results[i][0].transcript;
-                    } else {
-                      interimTranscript += event.results[i][0].transcript;
-                    }
+                    transcriptData += event.results[i][0].transcript;
                   }
-                  setTranscript(prev => prev + finalTranscript + interimTranscript);
+                  setTranscript(prev => prev + transcriptData);
                 };
                 recognitionRef.current.start();
               }
 
-              // 3. Timer
               setTimeElapsed(0);
               timerRef.current = setInterval(() => {
                 setTimeElapsed(prev => prev + 1);
@@ -393,7 +360,7 @@
               setIsRecording(true);
            } catch (err) {
               console.error("Error accessing microphone:", err);
-              alert("Necesitamos acceso al micrófono para escucharte leer.");
+              alert("Necesitamos acceso al micrófono.");
            }
         };
 
@@ -430,8 +397,6 @@
 
         const submitQuiz = async () => {
             setViewState('ANALYZING');
-            
-            // Preparar audio en base64
             let audioBase64 = null;
             if (audioBlob) {
                 try {
@@ -440,8 +405,6 @@
                     console.error("Error converting audio blob", e);
                 }
             }
-
-            // 1. Evaluar con IA (Enviamos audio real)
             const result = await evaluateReadingSession(
               material.content, 
               transcript, 
@@ -459,25 +422,12 @@
             onComplete(evaluation.wpm, evaluation.overallScore * 10);
         };
 
-        const playSystemReading = () => {
-            speakText(material.content);
-        };
-
-        const playMyReading = () => {
-            if (audioUrl) {
-                const audio = new Audio(audioUrl);
-                audio.play();
-            }
-        };
-
-        // --- RENDERIZADO DE ESTADOS ---
-
         if (viewState === 'RESULTS' && evaluation) {
            const metrics = evaluation.metrics;
            return (
              <div className="max-w-3xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-fade-in">
                <div className="text-center mb-6">
-                 <h2 className="text-3xl font-extrabold text-blue-600 mb-2">¡Increíble Trabajo!</h2>
+                 <h2 className="text-3xl font-extrabold text-blue-600 mb-2">¡Lección Completada!</h2>
                  <div className="flex justify-center items-center gap-2">
                     <Trophy className="text-yellow-400 w-8 h-8 fill-current" />
                     <span className="text-2xl font-bold text-gray-700">Puntuación: {evaluation.overallScore}/10</span>
@@ -485,31 +435,22 @@
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                  {/* Pillar Cards */}
                   {[
                     { title: "Precisión", icon: <Target className="text-red-500"/>, data: metrics.precision },
                     { title: "Fluidez", icon: <Activity className="text-green-500"/>, data: metrics.fluency },
-                    { title: "Tono y Expresión", icon: <Volume2 className="text-blue-500"/>, data: metrics.tone },
+                    { title: "Tono", icon: <Volume2 className="text-blue-500"/>, data: metrics.tone },
                     { title: "Comprensión", icon: <BookOpen className="text-purple-500"/>, data: metrics.comprehension },
                     { title: "Atención", icon: <Eye className="text-orange-500"/>, data: metrics.attention },
                     { title: "Memoria", icon: <Brain className="text-pink-500"/>, data: metrics.memory },
                   ].map((item, idx) => (
-                    <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col gap-2">
-                       <div className="flex justify-between items-center">
+                    <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                       <div className="flex justify-between items-center mb-1">
                           <div className="flex items-center gap-2 font-bold text-gray-700">
                              {item.icon} {item.title}
                           </div>
-                          <span className="bg-white px-2 py-1 rounded-lg font-bold shadow-sm text-sm border">
-                            {item.data.score}/10
-                          </span>
+                          <span className="bg-white px-2 py-1 rounded-lg font-bold text-sm border">{item.data.score}/10</span>
                        </div>
-                       <p className="text-sm text-gray-500 italic">"{item.data.feedback}"</p>
-                       <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-1000" 
-                            style={{width: `${item.data.score * 10}%`}}
-                          ></div>
-                       </div>
+                       <p className="text-xs text-gray-500">{item.data.feedback}</p>
                     </div>
                   ))}
                </div>
@@ -519,7 +460,7 @@
                     onClick={finishSession}
                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 flex items-center gap-2"
                   >
-                      <CheckCircle /> Continuar Aventura
+                      <CheckCircle /> Siguiente Lección
                   </button>
                </div>
              </div>
@@ -531,7 +472,7 @@
               <div className="flex flex-col items-center justify-center min-h-[400px] text-purple-600">
                   <RefreshCw className="animate-spin w-16 h-16 mb-6" />
                   <h3 className="text-2xl font-bold mb-2">Analizando tu voz...</h3>
-                  <p className="text-gray-500">Escuchando el tono, las pausas y tu seguridad.</p>
+                  <p className="text-gray-500">El búho sabio está revisando cada palabra.</p>
               </div>
            );
         }
@@ -539,11 +480,11 @@
         if (viewState === 'COMPARISON') {
             return (
                <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 animate-fade-in">
-                   <h2 className="text-3xl font-bold text-blue-600 text-center">¡Escúchate y Compara!</h2>
+                   <h2 className="text-3xl font-bold text-blue-600 text-center">Revisión Fonética</h2>
                    
                    <div className="bg-yellow-50 p-6 rounded-2xl border-2 border-yellow-200 max-w-lg w-full">
                        <h3 className="font-bold text-yellow-800 flex items-center gap-2 mb-2">
-                           <Info size={20}/> Consejo del Experto
+                           <Info size={20}/> Corrección
                        </h3>
                        <p className="text-gray-700 text-lg mb-2">
                          "{evaluation?.spokenFeedback}"
@@ -553,35 +494,24 @@
                             onClick={() => speakText(evaluation?.spokenFeedback)}
                             className="text-sm bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1 rounded-full flex items-center gap-1"
                          >
-                            <Volume2 size={14}/> Volver a oír consejo
+                            <Volume2 size={14}/> Repetir corrección
                          </button>
                        </div>
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
-                       {/* Lado Niño */}
-                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-blue-100 hover:border-blue-300 transition">
-                           <h3 className="text-xl font-bold text-gray-700 mb-4">Tu Lectura</h3>
-                           <button 
-                              onClick={playMyReading}
-                              disabled={!audioUrl}
-                              className="w-20 h-20 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center shadow-lg transition transform hover:scale-105 mb-2"
-                           >
+                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-blue-100 hover:border-blue-300 transition cursor-pointer" onClick={() => audioUrl && new Audio(audioUrl).play()}>
+                           <h3 className="text-xl font-bold text-gray-700 mb-4">Tú dijiste</h3>
+                           <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
                                <Ear className="text-white w-10 h-10" />
-                           </button>
-                           <p className="text-sm text-gray-500">Pulsa para escucharte</p>
+                           </div>
                        </div>
 
-                       {/* Lado Experto */}
-                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-green-100 hover:border-green-300 transition">
-                           <h3 className="text-xl font-bold text-gray-700 mb-4">Lectura Experta</h3>
-                           <button 
-                              onClick={playSystemReading}
-                              className="w-20 h-20 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center shadow-lg transition transform hover:scale-105 mb-2"
-                           >
+                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-green-100 hover:border-green-300 transition cursor-pointer" onClick={() => speakText(material.content)}>
+                           <h3 className="text-xl font-bold text-gray-700 mb-4">Correcto</h3>
+                           <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
                                <Volume2 className="text-white w-10 h-10" />
-                           </button>
-                           <p className="text-sm text-gray-500">Así debe sonar</p>
+                           </div>
                        </div>
                    </div>
 
@@ -589,7 +519,7 @@
                        onClick={() => setViewState('RESULTS')}
                        className="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-12 rounded-full text-xl shadow-xl transition"
                    >
-                       Ver mis notas finales
+                       Ver Calificaciones
                    </button>
                </div>
             );
@@ -600,7 +530,7 @@
             
             return (
                 <div className="max-w-2xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-blob">
-                    <h2 className="text-2xl font-bold text-purple-600 mb-4">¿Qué recuerdas?</h2>
+                    <h2 className="text-2xl font-bold text-purple-600 mb-4">¿Qué leíste?</h2>
                     <div className="space-y-6">
                         {material.questions.map((q, idx) => (
                             <div key={idx} className="bg-purple-50 p-4 rounded-xl">
@@ -627,7 +557,7 @@
                         <button 
                           onClick={submitQuiz}
                           disabled={!allAnswered}
-                          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105"
+                          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg"
                         >
                             Evaluar Lectura
                         </button>
@@ -639,17 +569,14 @@
         return (
           <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
             <div className="w-full bg-white p-6 rounded-3xl shadow-lg border-b-4 border-blue-200 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <BookOpen size={120} />
-              </div>
               <h2 className="text-3xl font-extrabold text-blue-600 mb-2">{material.title}</h2>
-              <span className="inline-block bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-semibold">
+              <span className="inline-block bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-lg font-mono">
                   {material.theme}
               </span>
             </div>
 
             <div className="w-full bg-amber-50 p-8 rounded-3xl shadow-inner border-4 border-amber-200 min-h-[300px] flex items-center justify-center relative">
-              <p className="text-2xl md:text-3xl leading-relaxed font-medium text-gray-800 text-center font-sans">
+              <p className="text-4xl leading-loose font-medium text-gray-800 text-center font-sans tracking-wide">
                 {material.content}
               </p>
               {isRecording && (
@@ -664,30 +591,16 @@
             <div className="flex flex-col items-center gap-4 w-full">
                 <div className="flex gap-6 items-center">
                   {!isRecording && (
-                      <button
-                          onClick={toggleRecording}
-                          className="group relative flex items-center justify-center w-20 h-20 bg-green-500 rounded-full shadow-green-400 shadow-xl transform transition hover:scale-110 active:scale-95"
-                      >
-                          <Mic className="text-white w-10 h-10" />
-                          <span className="absolute -bottom-8 text-green-700 font-bold whitespace-nowrap">Leer</span>
+                      <button onClick={toggleRecording} className="group relative flex items-center justify-center w-24 h-24 bg-green-500 rounded-full shadow-green-400 shadow-xl transform transition hover:scale-110 active:scale-95">
+                          <Mic className="text-white w-12 h-12" />
                       </button>
                   )}
-
                   {isRecording && (
-                      <button
-                          onClick={toggleRecording}
-                          className="flex items-center justify-center w-20 h-20 bg-red-500 rounded-full shadow-red-400 shadow-xl transform transition hover:scale-110 active:scale-95"
-                      >
-                          <Square className="text-white w-8 h-8 fill-current" />
+                      <button onClick={toggleRecording} className="flex items-center justify-center w-24 h-24 bg-red-500 rounded-full shadow-red-400 shadow-xl transform transition hover:scale-110 active:scale-95">
+                          <Square className="text-white w-10 h-10 fill-current" />
                       </button>
                   )}
                 </div>
-
-                {isRecording && (
-                    <div className="text-4xl font-mono font-bold text-gray-400 mt-4">
-                        {Math.floor(timeElapsed / 60).toString().padStart(2, '0')}:{(timeElapsed % 60).toString().padStart(2, '0')}
-                    </div>
-                )}
             </div>
 
             <button onClick={onRequestBreak} className="mt-8 text-gray-400 hover:text-gray-600 underline text-sm">
@@ -698,24 +611,16 @@
       };
 
       const BreakGame = ({ onFinishBreak }) => {
-        const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+        const [timeLeft, setTimeLeft] = useState(300); 
         const [score, setScore] = useState(0);
         const [targetPos, setTargetPos] = useState({ top: '50%', left: '50%' });
         const [gameActive, setGameActive] = useState(false);
-        
         const containerRef = useRef(null);
 
         useEffect(() => {
           const timer = setInterval(() => {
-            setTimeLeft((prev) => {
-              if (prev <= 1) {
-                clearInterval(timer);
-                return 0;
-              }
-              return prev - 1;
-            });
+            setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
           }, 1000);
-
           return () => clearInterval(timer);
         }, []);
 
@@ -736,12 +641,6 @@
             moveTarget();
         };
 
-        const formatTime = (seconds) => {
-            const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            return `${m}:${s.toString().padStart(2, '0')}`;
-        };
-
         return (
           <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900 text-white rounded-3xl p-6 relative overflow-hidden">
               <div className="absolute top-4 w-full flex justify-between px-8 z-20">
@@ -750,77 +649,55 @@
                       <span className="font-bold text-xl">{score} pts</span>
                   </div>
                   <div className="font-mono text-xl bg-indigo-800 px-3 py-1 rounded-lg">
-                      Descanso: {formatTime(timeLeft)}
+                      {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                   </div>
               </div>
 
-              <div 
-                  ref={containerRef}
-                  className="w-full max-w-2xl h-96 bg-indigo-800 rounded-2xl relative shadow-inner border-4 border-indigo-700 overflow-hidden cursor-crosshair"
-              >
+              <div ref={containerRef} className="w-full max-w-2xl h-96 bg-indigo-800 rounded-2xl relative shadow-inner border-4 border-indigo-700 overflow-hidden cursor-crosshair">
                   {!gameActive ? (
                       <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/40 backdrop-blur-sm">
-                          <h3 className="text-3xl font-bold mb-4 text-center">Atrapa la Burbuja</h3>
-                          <p className="mb-6 text-indigo-200">Mejora tu concentración atrapando los objetivos.</p>
-                          <button 
-                              onClick={startGame}
-                              className="bg-yellow-400 hover:bg-yellow-300 text-indigo-900 font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105"
-                          >
-                              JUGAR
-                          </button>
+                          <h3 className="text-3xl font-bold mb-4">Atrapa la Burbuja</h3>
+                          <button onClick={startGame} className="bg-yellow-400 text-indigo-900 font-bold py-3 px-8 rounded-full">JUGAR</button>
                       </div>
                   ) : (
-                      <button
-                          onClick={handleTargetClick}
-                          style={{ top: targetPos.top, left: targetPos.left }}
-                          className="absolute w-16 h-16 transform -translate-x-1/2 -translate-y-1/2 focus:outline-none transition-all duration-300 ease-out"
-                      >
-                           <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-500 rounded-full shadow-lg animate-pulse border-4 border-white flex items-center justify-center">
+                      <button onClick={handleTargetClick} style={{ top: targetPos.top, left: targetPos.left }} className="absolute w-16 h-16 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out">
+                           <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-500 rounded-full shadow-lg border-4 border-white flex items-center justify-center">
                               <Target className="w-8 h-8 text-white" />
                            </div>
                       </button>
                   )}
               </div>
-
               <div className="mt-8 text-center z-20">
-                  <p className="text-indigo-300 mb-4 text-sm">El botón para volver aparecerá pronto...</p>
-                  <button 
-                      onClick={onFinishBreak}
-                      className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg text-sm transition"
-                  >
-                      Saltar descanso (Volver a Leer)
-                  </button>
+                  <button onClick={onFinishBreak} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg text-sm">Volver a Leer</button>
               </div>
-              
-              <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-              <div className="absolute -top-20 -right-20 w-64 h-64 bg-pink-600 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
           </div>
         );
       };
 
       const Dashboard = ({ user, onSelectLevel, onChangeLevel }) => {
+        // Mapeo directo de las lecciones del libro Mi Jardín (Páginas 4-20)
         const levels = [
-          { level: 1, name: "Sílabas Mágicas (M, P, S)", desc: "Ma, me, mi, mo, mu" },
-          { level: 2, name: "Palabras Amigas", desc: "Palabras cortas y simples" },
-          { level: 3, name: "Frases de mi Jardín", desc: "Oraciones de la vida diaria" },
-          { level: 4, name: "Cuentos Cortos", desc: "Historias con enseñanza" },
-          { level: 5, name: "Lectura Experta", desc: "Texto fluido y completo" },
+          { level: 1, name: "Las Vocales", desc: "a, e, i, o, u" },
+          { level: 2, name: "Letra M", desc: "ma, me, mi, mo, mu" },
+          { level: 3, name: "Letra P", desc: "pa, pe, pi, po, pu" },
+          { level: 4, name: "Letra L", desc: "la, le, li, lo, lu" },
+          { level: 5, name: "Letra S", desc: "sa, se, si, so, su" },
+          { level: 6, name: "Letra T", desc: "ta, te, ti, to, tu" },
+          { level: 7, name: "Letra N", desc: "na, ne, ni, no, nu" },
+          { level: 8, name: "Letra D", desc: "da, de, di, do, du" },
+          { level: 9, name: "Letra C", desc: "ca, co, cu (fuerte)" },
+          { level: 10, name: "Letra B", desc: "ba, be, bi, bo, bu" },
+          { level: 11, name: "Letra V", desc: "va, ve, vi, vo, vu" },
+          { level: 12, name: "¡Ya sé leer!", desc: "Lectura completa" },
         ];
-
-        const chartData = user.readingHistory.slice(-5).map((log, i) => ({
-            name: `Sesión ${i + 1}`,
-            wpm: log.wpm
-        }));
 
         return (
           <div className="max-w-5xl mx-auto p-4 space-y-8">
             <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center relative overflow-hidden">
-               {/* Decorative #4 */}
-               <div className="absolute -right-6 -top-6 text-white/10 font-bold text-9xl">4</div>
-               
+               <div className="absolute -right-6 -top-6 text-white/10 font-bold text-9xl">5</div>
               <div>
                   <h1 className="text-4xl font-extrabold mb-2">¡Hola, {user.name}!</h1>
-                  <p className="text-blue-100 text-lg">Estás en racha: {user.streak} días 🔥</p>
+                  <p className="text-blue-100 text-lg">Lección Actual: Nivel {user.currentLevel}</p>
               </div>
               <div className="mt-4 md:mt-0 flex items-center bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-sm z-10">
                   <Star className="text-yellow-300 w-8 h-8 mr-2 fill-current" />
@@ -828,76 +705,51 @@
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-4">
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">Tu Mapa de Aventura</h2>
-                  <div className="grid gap-4">
-                      {levels.map((lvl) => {
-                          const isCurrent = lvl.level === user.currentLevel;
-                          return (
-                              <div 
-                                  key={lvl.level}
-                                  className={`relative p-4 rounded-2xl border-b-4 transition-all duration-200 flex items-center justify-between
-                                      ${isCurrent ? 'bg-white border-blue-400 shadow-lg scale-105 z-10' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-white'}
-                                  `}
-                              >
-                                  <div className="flex items-center gap-4">
-                                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl
-                                          ${isCurrent ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'}
-                                      `}>
-                                          {lvl.level}
-                                      </div>
-                                      <div>
-                                          <h3 className={`font-bold text-lg ${isCurrent ? 'text-blue-700' : ''}`}>{lvl.name}</h3>
-                                          <p className="text-sm">{lvl.desc}</p>
-                                      </div>
-                                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {levels.map((lvl) => {
+                    const isCurrent = lvl.level === user.currentLevel;
+                    const isPassed = lvl.level < user.currentLevel;
+                    
+                    return (
+                        <div 
+                            key={lvl.level}
+                            className={`relative p-6 rounded-2xl border-b-4 transition-all duration-200 flex flex-col justify-between h-40
+                                ${isCurrent ? 'bg-white border-blue-400 shadow-xl ring-2 ring-blue-200 scale-105 z-10' : 
+                                  isPassed ? 'bg-green-50 border-green-200 opacity-80' : 'bg-gray-50 border-gray-200 text-gray-400'}
+                            `}
+                        >
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className={`text-sm font-bold uppercase tracking-wider mb-1 ${isCurrent ? 'text-blue-500' : 'text-gray-400'}`}>
+                                        Nivel {lvl.level}
+                                    </div>
+                                    <h3 className={`font-bold text-xl ${isCurrent ? 'text-gray-800' : ''}`}>{lvl.name}</h3>
+                                    <p className="text-sm mt-1">{lvl.desc}</p>
+                                </div>
+                                {isPassed && <CheckCircle className="text-green-500" />}
+                            </div>
 
-                                  {isCurrent ? (
-                                      <button 
-                                          onClick={() => onSelectLevel(lvl.level)}
-                                          className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full font-bold shadow-md flex items-center gap-2"
-                                      >
-                                          <PlayCircle size={20}/> Jugar
-                                      </button>
-                                  ) : (
-                                      <button 
-                                          onClick={() => onChangeLevel(lvl.level)}
-                                          className="text-blue-400 font-semibold text-sm hover:underline"
-                                      >
-                                          Cambiar aquí
-                                      </button>
-                                  )}
-                              </div>
-                          );
-                      })}
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 h-fit">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <BarChart2 className="text-purple-500"/> Tu Evolución
-                    </h2>
-                    <div className="h-48 w-full">
-                      {chartData.length > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={chartData}>
-                                  <XAxis dataKey="name" hide />
-                                  <YAxis hide />
-                                  <Tooltip 
-                                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                  />
-                                  <Line type="monotone" dataKey="wpm" stroke="#8884d8" strokeWidth={3} dot={{r: 4}} />
-                              </LineChart>
-                          </ResponsiveContainer>
-                      ) : (
-                          <div className="flex items-center justify-center h-full text-gray-400 text-center text-sm">
-                              Completa lecciones para ver tu velocidad aquí.
-                          </div>
-                      )}
-                    </div>
-                    <p className="text-center text-sm text-gray-500 mt-2">Velocidad de lectura (palabras/min)</p>
-                </div>
+                            <div className="mt-4">
+                                {isCurrent ? (
+                                    <button 
+                                        onClick={() => onSelectLevel(lvl.level)}
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl font-bold shadow-md flex items-center justify-center gap-2"
+                                    >
+                                        <PlayCircle size={18}/> Comenzar
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => onChangeLevel(lvl.level)}
+                                        className={`w-full py-2 rounded-xl font-bold text-sm border-2 
+                                            ${isPassed ? 'border-green-200 text-green-600 hover:bg-green-100' : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+                                    >
+                                        {isPassed ? 'Repasar' : 'Saltar aquí'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
           </div>
         );
@@ -935,10 +787,7 @@
 
         const startReadingSession = async (level) => {
           setLoading(true);
-          const topics = ["Superhéroes", "Espacio", "Dinosaurios", "Videojuegos", "Animales Marinos"];
-          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-          
-          const material = await generateReadingMaterial(level, randomTopic);
+          const material = await generateReadingMaterial(level);
           setCurrentMaterial(material);
           setLoading(false);
           setAppState(AppState.READING);
@@ -950,14 +799,12 @@
 
         const handleReadingComplete = (wpm, accuracy) => {
           const xpGained = Math.round((accuracy + wpm) / 2);
-          
           setUser(prev => ({
               ...prev,
               xp: prev.xp + xpGained,
-              readingHistory: [
-                  ...prev.readingHistory, 
-                  { date: new Date().toISOString(), wpm, accuracy, level: prev.currentLevel }
-              ]
+              // Avanzar nivel automáticamente si la precisión es buena
+              currentLevel: accuracy > 70 && prev.currentLevel < 12 ? prev.currentLevel + 1 : prev.currentLevel,
+              readingHistory: [...prev.readingHistory, { date: new Date().toISOString(), wpm, accuracy, level: prev.currentLevel }]
           }));
           setAppState(AppState.DASHBOARD);
         };
@@ -973,9 +820,8 @@
         if (appState === AppState.ONBOARDING) {
           return (
             <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center p-4 relative overflow-hidden">
-               {/* Number 4 Decorative */}
-               <div className="absolute top-10 left-10 text-9xl font-black text-blue-100 opacity-50 select-none">4</div>
-               <div className="absolute bottom-10 right-10 text-9xl font-black text-blue-100 opacity-50 select-none">4</div>
+               <div className="absolute top-10 left-10 text-9xl font-black text-blue-100 opacity-50 select-none">5</div>
+               <div className="absolute bottom-10 right-10 text-9xl font-black text-blue-100 opacity-50 select-none">5</div>
               
               <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-b-8 border-blue-500 relative z-10">
                   <div className="flex justify-center mb-6">
@@ -983,8 +829,8 @@
                           <Rocket className="text-blue-600 w-16 h-16" />
                       </div>
                   </div>
-                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras <span className="text-blue-500 text-5xl">4</span></h1>
-                  <p className="text-gray-500 mb-8 text-lg">¡Aprender a leer es tu súper poder!</p>
+                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras <span className="text-blue-500 text-5xl">5</span></h1>
+                  <p className="text-gray-500 mb-8 text-lg">Aprende con el libro "Mi Jardín"</p>
                   
                   <div className="space-y-4">
                       <label className="block text-left font-bold text-gray-700 ml-1">¿Cómo te llamas?</label>
@@ -992,14 +838,14 @@
                           type="text" 
                           value={nameInput}
                           onChange={(e) => setNameInput(e.target.value)}
-                          placeholder="Escribe tu nombre aquí..."
+                          placeholder="Tu nombre..."
                           className="w-full text-xl p-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
                           onKeyDown={(e) => e.key === 'Enter' && handleStartOnboarding()}
                       />
                       <button 
                           onClick={handleStartOnboarding}
                           disabled={!nameInput.trim()}
-                          className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xl shadow-lg shadow-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transform transition active:scale-95"
+                          className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xl shadow-lg transition"
                       >
                           ¡Comenzar!
                       </button>
@@ -1013,8 +859,7 @@
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center bg-blue-50">
                     <Loader2 className="w-16 h-16 text-blue-500 animate-spin mb-4" />
-                    <h2 className="text-2xl font-bold text-blue-700 animate-pulse">Creando tu aventura...</h2>
-                    <p className="text-blue-400">Nuestros robots están escribiendo una historia genial.</p>
+                    <h2 className="text-2xl font-bold text-blue-700 animate-pulse">Abriendo tu libro...</h2>
                 </div>
             )
         }
@@ -1025,7 +870,7 @@
                   <div className="max-w-5xl mx-auto flex justify-between items-center">
                       <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppState(AppState.DASHBOARD)}>
                           <Rocket className="text-blue-600"/>
-                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras <span className="text-blue-500">4</span></span>
+                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras <span className="text-blue-500">5</span></span>
                       </div>
                       <div className="flex gap-4">
                          {appState !== AppState.BREAK_TIME && (
@@ -1065,7 +910,6 @@
         );
       }
 
-      // --- 4. RENDERIZADO ---
       const rootElement = document.getElementById('root');
       const root = ReactDOM.createRoot(rootElement);
       root.render(
