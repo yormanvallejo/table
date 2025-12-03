@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LeoAventuras 3</title>
+    <title>LeoAventuras 4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -115,32 +115,36 @@
         }
       };
 
-      const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en TDAH. 
-      Tu objetivo es crear contenido de lectura motivador, corto y estructurado para un niño de 10 años.
-      Usa lenguaje positivo, temas fascinantes (espacio, animales, videojuegos, superhéroes) y frases claras.
-      Evita párrafos densos.`;
+      const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en alfabetización inicial (método silábico tipo "Libro Mi Jardín" o "Coquito") y TDAH.
+      Tu objetivo es crear contenido de lectura progresivo, altamente estructurado y repetitivo para reforzar el aprendizaje fonético.
+      
+      ESTILO DE ESCRITURA:
+      - Usa frases cortas y simples.
+      - Repetición de sonidos clave (Ej: "Mi mamá me ama. Amo a mi mamá.").
+      - Lenguaje positivo y alentador.
+      - Temas clásicos: Familia, Escuela, Animales, Juegos.`;
 
       const generateReadingMaterial = async (level, interests = "general") => {
         const levelPrompts = {
-          1: "Nivel muy básico: Palabras simples, sílabas claras, frases de máximo 3 palabras.",
-          2: "Nivel básico: Frases cortas y directas. Vocabulario cotidiano.",
-          3: "Nivel intermedio: Párrafos cortos (3-4 líneas). Historias con inicio y fin simple.",
-          4: "Nivel avanzado: Historias con diálogo simple y descripciones moderadas.",
-          5: "Nivel experto: Lectura fluida, textos informativos o narrativos completos adecuados para 10 años."
+          1: "NIVEL INICIAL (SÍLABAS DIRECTAS): Enfócate EXCLUSIVAMENTE en letras M, P, S, L y vocales. Ejemplo: 'Mi mamá. Ese oso. La loma'. Frases de sujeto + verbo. No uses palabras complejas.",
+          2: "NIVEL BÁSICO (CONSONANTES T, D, N + INVERSAS): Introduce T, D, N. Frases tipo: 'Tito toma té'. 'El dado de papá'. 'La nena me saluda'. Oraciones de 4-5 palabras.",
+          3: "NIVEL INTERMEDIO (TEXTOS CORTOS MI JARDÍN): Pequeños párrafos sobre situaciones cotidianas. Uso de R, F, B, V. Ejemplo: 'La familia pasea. El perro corre rápido. Veo una flor bonita.'",
+          4: "NIVEL AVANZADO (FÁBULAS CORTAS): Historias con inicio, nudo y desenlace simple. Vocabulario más variado incluyendo sílabas trabadas (pla, bra, etc). Temas: Amistad, Valores.",
+          5: "NIVEL EXPERTO (LECTURA FLUIDA): Textos informativos interesantes o cuentos completos adecuados para 10 años. Párrafos más largos."
         };
 
-        const prompt = `Genera un ejercicio de lectura.
+        const prompt = `Genera una lección de lectura estilo libro "Mi Jardín".
         Nivel: ${level} (${levelPrompts[level]}).
         Tema sugerido: ${interests}.
         
         Devuelve un JSON con:
-        - title: Título divertido.
-        - content: El texto a leer.
+        - title: Título simple (Ej: "La M de Mamá", "El Oso Pepe").
+        - content: El texto a leer. Debe ser rítmico y fonético.
         - theme: El tema principal.
         - questions: Array de 3 preguntas. 
             1. Literal (dato explícito).
-            2. Inferencial (deducción).
-            3. Crítica/Opinión (o detalle de memoria).
+            2. Inferencial (deducción simple).
+            3. Crítica/Opinión.
           Cada pregunta debe tener 'question', 'options' (3 opciones) y 'correctIndex'.`;
 
         try {
@@ -182,24 +186,24 @@
           // Fallback en caso de error
           return {
             id: "fallback-1",
-            title: "El Perro Veloz",
-            content: "El perro corre mucho. Le gusta la pelota. Salta muy alto.",
-            theme: "Animales",
+            title: "Mi Mamá",
+            content: "Mi mamá me ama. Amo a mi mamá. Mi mamá me mima. Ema ama a mamá.",
+            theme: "Letra M",
             questions: [
               {
-                question: "¿Qué hace el perro?",
-                options: ["Duerme", "Corre mucho", "Come"],
+                question: "¿Quién me ama?",
+                options: ["El oso", "Mi mamá", "La mesa"],
                 correctIndex: 1
               },
               {
-                  question: "¿Qué le gusta?",
-                  options: ["La pelota", "El gato", "La lluvia"],
+                  question: "¿A quién ama Ema?",
+                  options: ["A mamá", "A papá", "A la sopa"],
                   correctIndex: 0
               },
                {
-                  question: "¿Cómo crees que se siente el perro?",
-                  options: ["Triste", "Feliz", "Enojado"],
-                  correctIndex: 1
+                  question: "¿Cómo es mi mamá?",
+                  options: ["Buena", "Mala", "Alta"],
+                  correctIndex: 0
               }
             ]
           };
@@ -796,11 +800,11 @@
 
       const Dashboard = ({ user, onSelectLevel, onChangeLevel }) => {
         const levels = [
-          { level: 1, name: "Explorador de Palabras", desc: "Sílabas y palabras sueltas" },
-          { level: 2, name: "Constructor de Frases", desc: "Oraciones cortas y divertidas" },
-          { level: 3, name: "Pequeño Lector", desc: "Párrafos simples" },
-          { level: 4, name: "Aventurero de Historias", desc: "Cuentos cortos" },
-          { level: 5, name: "Maestro de la Lectura", desc: "Texto corrido y fluido" },
+          { level: 1, name: "Sílabas Mágicas (M, P, S)", desc: "Ma, me, mi, mo, mu" },
+          { level: 2, name: "Palabras Amigas", desc: "Palabras cortas y simples" },
+          { level: 3, name: "Frases de mi Jardín", desc: "Oraciones de la vida diaria" },
+          { level: 4, name: "Cuentos Cortos", desc: "Historias con enseñanza" },
+          { level: 5, name: "Lectura Experta", desc: "Texto fluido y completo" },
         ];
 
         const chartData = user.readingHistory.slice(-5).map((log, i) => ({
@@ -811,8 +815,8 @@
         return (
           <div className="max-w-5xl mx-auto p-4 space-y-8">
             <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center relative overflow-hidden">
-               {/* Decorative #3 */}
-               <div className="absolute -right-6 -top-6 text-white/10 font-bold text-9xl">3</div>
+               {/* Decorative #4 */}
+               <div className="absolute -right-6 -top-6 text-white/10 font-bold text-9xl">4</div>
                
               <div>
                   <h1 className="text-4xl font-extrabold mb-2">¡Hola, {user.name}!</h1>
@@ -969,9 +973,9 @@
         if (appState === AppState.ONBOARDING) {
           return (
             <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center p-4 relative overflow-hidden">
-               {/* Number 3 Decorative */}
-               <div className="absolute top-10 left-10 text-9xl font-black text-blue-100 opacity-50 select-none">3</div>
-               <div className="absolute bottom-10 right-10 text-9xl font-black text-blue-100 opacity-50 select-none">3</div>
+               {/* Number 4 Decorative */}
+               <div className="absolute top-10 left-10 text-9xl font-black text-blue-100 opacity-50 select-none">4</div>
+               <div className="absolute bottom-10 right-10 text-9xl font-black text-blue-100 opacity-50 select-none">4</div>
               
               <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-b-8 border-blue-500 relative z-10">
                   <div className="flex justify-center mb-6">
@@ -979,7 +983,7 @@
                           <Rocket className="text-blue-600 w-16 h-16" />
                       </div>
                   </div>
-                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras <span className="text-blue-500 text-5xl">3</span></h1>
+                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras <span className="text-blue-500 text-5xl">4</span></h1>
                   <p className="text-gray-500 mb-8 text-lg">¡Aprender a leer es tu súper poder!</p>
                   
                   <div className="space-y-4">
@@ -1021,7 +1025,7 @@
                   <div className="max-w-5xl mx-auto flex justify-between items-center">
                       <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppState(AppState.DASHBOARD)}>
                           <Rocket className="text-blue-600"/>
-                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras <span className="text-blue-500">3</span></span>
+                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras <span className="text-blue-500">4</span></span>
                       </div>
                       <div className="flex gap-4">
                          {appState !== AppState.BREAK_TIME && (
