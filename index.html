@@ -57,7 +57,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile, Ear } from 'lucide-react';
+      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile, Ear, Info } from 'lucide-react';
       import { GoogleGenAI, Type } from "@google/genai";
       import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -81,6 +81,19 @@
 
       // Inicializar IA
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+      // Helper para convertir Blob a Base64
+      const blobToBase64 = (blob) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64String = reader.result.split(',')[1]; // Remover el prefijo data:audio/xyz;base64,
+            resolve(base64String);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      };
 
       // Función helper para TTS (Texto a Voz)
       const speakText = (text, onEnd) => {
@@ -193,35 +206,47 @@
         }
       };
 
-      const evaluateReadingSession = async (originalText, transcript, durationSeconds, quizScore, totalQuestions) => {
+      const evaluateReadingSession = async (originalText, transcript, durationSeconds, quizScore, totalQuestions, audioBase64) => {
         try {
-          const prompt = `Evalúa la lectura de un niño de 10 años con TDAH basándote en estos 6 pilares:
+          const parts = [];
+          
+          // Si tenemos audio, lo enviamos para un análisis real de tono y fluidez
+          if (audioBase64) {
+             parts.push({
+               inlineData: {
+                 mimeType: "audio/webm", // O 'audio/mp3' dependiendo del navegador, pero webm es standard para MediaRecorder
+                 data: audioBase64
+               }
+             });
+          }
 
-          CONTEXTO:
-          - Texto Original: "${originalText}"
-          - Transcripción del niño: "${transcript}"
-          - Duración: ${durationSeconds} segundos.
-          - Comprensión (Quiz): Respondió correctamente ${quizScore} de ${totalQuestions} preguntas.
-
-          CRITERIOS DE EVALUACIÓN (0 a 10):
-          1. Precisión: ¿Leyó las palabras correctas?
-          2. Fluidez: Velocidad y ritmo.
-          3. Comprensión: Basado en el Quiz.
-          4. Atención: ¿Completó el texto?
-          5. Memoria.
-          6. Autorregulación.
-
-          IMPORTANTE: Genera un 'spokenFeedback' (string) que sea lo que el tutor le dirá AL NIÑO en voz alta. 
-          Debe ser:
-          1. Amable y motivador.
-          2. Señalar 1 corrección específica si hubo error (ej: "Noté que dijiste 'casa' pero era 'caza'", "Intenta pausar en los puntos").
-          3. Máximo 2 frases.
-
-          Devuelve JSON.`;
+          parts.push({
+            text: `Evalúa la lectura de un niño de 10 años con TDAH.
+            
+            CONTEXTO:
+            - Texto Original: "${originalText}"
+            - Duración: ${durationSeconds} segundos.
+            - Comprensión (Quiz): ${quizScore}/${totalQuestions}.
+            
+            TAREA:
+            Escucha el audio (si está disponible) y analiza:
+            1. Tono de voz (¿Es monótono o expresivo?).
+            2. Certeza (¿Duda mucho o lee con seguridad?).
+            3. Fluidez (Pausas correctas vs. interrupciones).
+            
+            Genera un diagnóstico CRÍTICO pero POSITIVO.
+            - Señala un error específico de pronunciación o ritmo si lo hay.
+            - Elogia el esfuerzo.
+            
+            IMPORTANTE: Genera un 'diagnosticFeedback' (string) que sea directo para el niño.
+            Genera 'spokenFeedback' para que el sistema lo lea (más corto).
+            
+            Devuelve JSON.`
+          });
 
           const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: prompt,
+            contents: { parts },
             config: {
               responseMimeType: "application/json",
                responseSchema: {
@@ -229,16 +254,17 @@
                 properties: {
                   overallScore: { type: Type.NUMBER },
                   wpm: { type: Type.NUMBER },
-                  spokenFeedback: { type: Type.STRING, description: "Feedback corto para ser leído por TTS" },
+                  diagnosticFeedback: { type: Type.STRING, description: "Evaluación detallada de tono, certeza y fluidez." },
+                  spokenFeedback: { type: Type.STRING, description: "Resumen corto para TTS." },
                   metrics: {
                     type: Type.OBJECT,
                     properties: {
                       precision: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
                       fluency: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
+                      tone: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
                       comprehension: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
                       attention: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      memory: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      selfRegulation: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } }
+                      memory: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } }
                     }
                   }
                 }
@@ -254,14 +280,15 @@
           return { 
             overallScore: 8, 
             wpm: Math.round((originalText.split(' ').length / durationSeconds) * 60), 
-            spokenFeedback: "¡Buen trabajo leyendo! Sigue practicando las pausas.",
+            diagnosticFeedback: "Has leído muy bien, con buena velocidad. Intenta dar más entonación a las preguntas.",
+            spokenFeedback: "¡Buen trabajo! Sigue practicando las pausas.",
             metrics: {
-              precision: { score: 8, feedback: "¡Bien leído!" },
+              precision: { score: 8, feedback: "Muy preciso." },
               fluency: { score: 7, feedback: "Buen ritmo." },
+              tone: { score: 7, feedback: "Intenta ser más expresivo." },
               comprehension: { score: quizScore > 1 ? 9 : 6, feedback: "Entendiste la historia." },
-              attention: { score: 8, feedback: "Te mantuviste enfocado." },
-              memory: { score: 7, feedback: "Recordaste bien." },
-              selfRegulation: { score: 10, feedback: "¡Terminaste todo!" }
+              attention: { score: 8, feedback: "Enfocado." },
+              memory: { score: 7, feedback: "Buena memoria." }
             }
           };
         }
@@ -270,7 +297,7 @@
       // --- 2. COMPONENTES ---
 
       const ReadingView = ({ material, onComplete, onRequestBreak }) => {
-        // Estados: READING -> QUIZ -> ANALYZING -> MODELING (App lee) -> FEEDBACK (App corrige) -> RESULTS
+        // Estados: READING -> QUIZ -> ANALYZING -> COMPARISON -> RESULTS
         const [viewState, setViewState] = useState('READING'); 
         const [isRecording, setIsRecording] = useState(false);
         const [transcript, setTranscript] = useState('');
@@ -278,61 +305,105 @@
         const [quizScore, setQuizScore] = useState(0);
         const [evaluation, setEvaluation] = useState(null);
         const [userAnswers, setUserAnswers] = useState({});
-        const [playbackMessage, setPlaybackMessage] = useState('');
+        const [audioBlob, setAudioBlob] = useState(null);
+        const [audioUrl, setAudioUrl] = useState(null);
 
         const recognitionRef = useRef(null);
+        const mediaRecorderRef = useRef(null);
+        const audioChunksRef = useRef([]);
         const timerRef = useRef(null);
 
         useEffect(() => {
-          const { webkitSpeechRecognition, SpeechRecognition } = window;
-          const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition;
-
-          if (SpeechRecognitionAPI) {
-            recognitionRef.current = new SpeechRecognitionAPI();
-            recognitionRef.current.continuous = true;
-            recognitionRef.current.interimResults = true;
-            recognitionRef.current.lang = 'es-ES';
-
-            recognitionRef.current.onresult = (event) => {
-              let interimTranscript = '';
-              let finalTranscript = '';
-
-              for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                  finalTranscript += event.results[i][0].transcript;
-                } else {
-                  interimTranscript += event.results[i][0].transcript;
-                }
-              }
-              setTranscript(prev => prev + finalTranscript + interimTranscript);
-            };
-          }
-
           return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-            if (recognitionRef.current) recognitionRef.current.stop();
-            window.speechSynthesis.cancel();
-          };
-        }, []);
+             // Cleanup audio url
+             if (audioUrl) URL.revokeObjectURL(audioUrl);
+             window.speechSynthesis.cancel();
+          }
+        }, [audioUrl]);
+
+        const startRecording = async () => {
+           try {
+              // 1. Configurar MediaRecorder para audio real
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              mediaRecorderRef.current = new MediaRecorder(stream);
+              audioChunksRef.current = [];
+              
+              mediaRecorderRef.current.ondataavailable = (event) => {
+                 if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                 }
+              };
+
+              mediaRecorderRef.current.onstop = () => {
+                 const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                 setAudioBlob(blob);
+                 const url = URL.createObjectURL(blob);
+                 setAudioUrl(url);
+                 
+                 // Stop all tracks
+                 stream.getTracks().forEach(track => track.stop());
+              };
+
+              mediaRecorderRef.current.start();
+
+              // 2. Configurar SpeechRecognition para transcripción texto (si está soportado)
+              const { webkitSpeechRecognition, SpeechRecognition } = window;
+              const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition;
+
+              if (SpeechRecognitionAPI) {
+                recognitionRef.current = new SpeechRecognitionAPI();
+                recognitionRef.current.continuous = true;
+                recognitionRef.current.interimResults = true;
+                recognitionRef.current.lang = 'es-ES';
+
+                recognitionRef.current.onresult = (event) => {
+                  let interimTranscript = '';
+                  let finalTranscript = '';
+                  for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                      finalTranscript += event.results[i][0].transcript;
+                    } else {
+                      interimTranscript += event.results[i][0].transcript;
+                    }
+                  }
+                  setTranscript(prev => prev + finalTranscript + interimTranscript);
+                };
+                recognitionRef.current.start();
+              }
+
+              // 3. Timer
+              setTimeElapsed(0);
+              timerRef.current = setInterval(() => {
+                setTimeElapsed(prev => prev + 1);
+              }, 1000);
+              
+              setIsRecording(true);
+           } catch (err) {
+              console.error("Error accessing microphone:", err);
+              alert("Necesitamos acceso al micrófono para escucharte leer.");
+           }
+        };
+
+        const stopRecording = () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+               mediaRecorderRef.current.stop();
+            }
+            if (recognitionRef.current) {
+               recognitionRef.current.stop();
+            }
+            if (timerRef.current) {
+               clearInterval(timerRef.current);
+            }
+            setIsRecording(false);
+            setViewState('QUIZ');
+        };
 
         const toggleRecording = () => {
           if (isRecording) {
-            // Detener grabación -> Ir al Quiz
-            if (recognitionRef.current) recognitionRef.current.stop();
-            if (timerRef.current) clearInterval(timerRef.current);
-            setIsRecording(false);
-            setViewState('QUIZ');
+            stopRecording();
           } else {
-            // Empezar grabación
             setTranscript('');
-            setTimeElapsed(0);
-            if (recognitionRef.current) {
-              try { recognitionRef.current.start(); } catch(e) { console.warn(e); }
-            }
-            timerRef.current = setInterval(() => {
-              setTimeElapsed(prev => prev + 1);
-            }, 1000);
-            setIsRecording(true);
+            startRecording();
           }
         };
 
@@ -347,38 +418,43 @@
         const submitQuiz = async () => {
             setViewState('ANALYZING');
             
-            // 1. Evaluar con IA
+            // Preparar audio en base64
+            let audioBase64 = null;
+            if (audioBlob) {
+                try {
+                    audioBase64 = await blobToBase64(audioBlob);
+                } catch (e) {
+                    console.error("Error converting audio blob", e);
+                }
+            }
+
+            // 1. Evaluar con IA (Enviamos audio real)
             const result = await evaluateReadingSession(
               material.content, 
               transcript, 
               timeElapsed, 
               quizScore, 
-              material.questions.length
+              material.questions.length,
+              audioBase64
             );
             setEvaluation(result);
-
-            // 2. Transición a Modelado (App lee el texto original)
-            setViewState('MODELING');
-            setPlaybackMessage("Escucha cómo lo leo yo...");
-            
-            speakText(material.content, () => {
-                // 3. Al terminar de leer el texto, Transición a Feedback (App da consejos)
-                setViewState('FEEDBACK');
-                setPlaybackMessage("Aquí un consejo para mejorar...");
-                
-                // Pequeña pausa antes del consejo
-                setTimeout(() => {
-                   speakText(result.spokenFeedback, () => {
-                       // 4. Al terminar consejo, mostrar resultados finales
-                       setViewState('RESULTS');
-                   });
-                }, 1000);
-            });
+            setViewState('COMPARISON');
         };
 
         const finishSession = () => {
             window.speechSynthesis.cancel();
             onComplete(evaluation.wpm, evaluation.overallScore * 10);
+        };
+
+        const playSystemReading = () => {
+            speakText(material.content);
+        };
+
+        const playMyReading = () => {
+            if (audioUrl) {
+                const audio = new Audio(audioUrl);
+                audio.play();
+            }
         };
 
         // --- RENDERIZADO DE ESTADOS ---
@@ -400,10 +476,10 @@
                   {[
                     { title: "Precisión", icon: <Target className="text-red-500"/>, data: metrics.precision },
                     { title: "Fluidez", icon: <Activity className="text-green-500"/>, data: metrics.fluency },
-                    { title: "Comprensión", icon: <BookOpen className="text-blue-500"/>, data: metrics.comprehension },
-                    { title: "Atención", icon: <Eye className="text-purple-500"/>, data: metrics.attention },
+                    { title: "Tono y Expresión", icon: <Volume2 className="text-blue-500"/>, data: metrics.tone },
+                    { title: "Comprensión", icon: <BookOpen className="text-purple-500"/>, data: metrics.comprehension },
+                    { title: "Atención", icon: <Eye className="text-orange-500"/>, data: metrics.attention },
                     { title: "Memoria", icon: <Brain className="text-pink-500"/>, data: metrics.memory },
-                    { title: "Control", icon: <Smile className="text-orange-500"/>, data: metrics.selfRegulation },
                   ].map((item, idx) => (
                     <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col gap-2">
                        <div className="flex justify-between items-center">
@@ -441,31 +517,56 @@
            return (
               <div className="flex flex-col items-center justify-center min-h-[400px] text-purple-600">
                   <RefreshCw className="animate-spin w-16 h-16 mb-6" />
-                  <h3 className="text-2xl font-bold mb-2">El Mago Sabio está pensando...</h3>
-                  <p className="text-gray-500">Evaluando tu velocidad, memoria y atención.</p>
+                  <h3 className="text-2xl font-bold mb-2">Analizando tu voz...</h3>
+                  <p className="text-gray-500">Escuchando el tono, las pausas y tu seguridad.</p>
               </div>
            );
         }
 
-        if (viewState === 'MODELING' || viewState === 'FEEDBACK') {
+        if (viewState === 'COMPARISON') {
             return (
-               <div className="flex flex-col items-center justify-center min-h-[400px] text-blue-600 animate-pulse">
-                   <div className="bg-blue-100 p-8 rounded-full mb-6 relative">
-                       <Volume2 className="w-20 h-20 text-blue-600" />
-                       <div className="absolute top-0 right-0 animate-ping h-6 w-6 rounded-full bg-blue-400 opacity-75"></div>
+               <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 animate-fade-in">
+                   <h2 className="text-3xl font-bold text-blue-600 text-center">¡Escúchate y Compara!</h2>
+                   
+                   <div className="bg-yellow-50 p-6 rounded-2xl border-2 border-yellow-200 max-w-lg w-full">
+                       <h3 className="font-bold text-yellow-800 flex items-center gap-2 mb-2">
+                           <Info size={20}/> Diagnóstico
+                       </h3>
+                       <p className="text-gray-700 italic text-lg">"{evaluation?.diagnosticFeedback}"</p>
                    </div>
-                   <h3 className="text-3xl font-bold mb-4">{viewState === 'MODELING' ? "Escucha la lectura correcta..." : "Consejo del Mago..."}</h3>
-                   <p className="text-xl text-gray-600 text-center max-w-md">
-                       {viewState === 'MODELING' ? "Compara cómo lo lees tú con cómo suena." : evaluation?.spokenFeedback}
-                   </p>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
+                       {/* Lado Niño */}
+                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-blue-100 hover:border-blue-300 transition">
+                           <h3 className="text-xl font-bold text-gray-700 mb-4">Tu Lectura</h3>
+                           <button 
+                              onClick={playMyReading}
+                              disabled={!audioUrl}
+                              className="w-20 h-20 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center shadow-lg transition transform hover:scale-105 mb-2"
+                           >
+                               <Ear className="text-white w-10 h-10" />
+                           </button>
+                           <p className="text-sm text-gray-500">Pulsa para escucharte</p>
+                       </div>
+
+                       {/* Lado Experto */}
+                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-green-100 hover:border-green-300 transition">
+                           <h3 className="text-xl font-bold text-gray-700 mb-4">Lectura Experta</h3>
+                           <button 
+                              onClick={playSystemReading}
+                              className="w-20 h-20 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center shadow-lg transition transform hover:scale-105 mb-2"
+                           >
+                               <Volume2 className="text-white w-10 h-10" />
+                           </button>
+                           <p className="text-sm text-gray-500">Así debe sonar</p>
+                       </div>
+                   </div>
+
                    <button 
-                       onClick={() => {
-                           window.speechSynthesis.cancel();
-                           setViewState('RESULTS');
-                       }}
-                       className="mt-8 text-sm text-gray-400 underline hover:text-gray-600"
+                       onClick={() => setViewState('RESULTS')}
+                       className="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-12 rounded-full text-xl shadow-xl transition"
                    >
-                       Saltar audio
+                       Ver mis notas finales
                    </button>
                </div>
             );
@@ -690,12 +791,15 @@
 
         return (
           <div className="max-w-5xl mx-auto p-4 space-y-8">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center relative overflow-hidden">
+               {/* Decorative #1 */}
+               <div className="absolute -right-6 -top-6 text-white/10 font-bold text-9xl">1</div>
+               
               <div>
                   <h1 className="text-4xl font-extrabold mb-2">¡Hola, {user.name}!</h1>
                   <p className="text-blue-100 text-lg">Estás en racha: {user.streak} días 🔥</p>
               </div>
-              <div className="mt-4 md:mt-0 flex items-center bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-sm">
+              <div className="mt-4 md:mt-0 flex items-center bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-sm z-10">
                   <Star className="text-yellow-300 w-8 h-8 mr-2 fill-current" />
                   <span className="text-3xl font-bold">{user.xp} XP</span>
               </div>
@@ -845,14 +949,18 @@
 
         if (appState === AppState.ONBOARDING) {
           return (
-            <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center p-4">
-              <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-b-8 border-blue-500">
+            <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center p-4 relative overflow-hidden">
+               {/* Number 1 Decorative */}
+               <div className="absolute top-10 left-10 text-9xl font-black text-blue-100 opacity-50 select-none">1</div>
+               <div className="absolute bottom-10 right-10 text-9xl font-black text-blue-100 opacity-50 select-none">1</div>
+              
+              <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-b-8 border-blue-500 relative z-10">
                   <div className="flex justify-center mb-6">
                       <div className="bg-blue-100 p-4 rounded-full">
                           <Rocket className="text-blue-600 w-16 h-16" />
                       </div>
                   </div>
-                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras</h1>
+                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras <span className="text-blue-500 text-5xl">1</span></h1>
                   <p className="text-gray-500 mb-8 text-lg">¡Aprender a leer es tu súper poder!</p>
                   
                   <div className="space-y-4">
@@ -894,7 +1002,7 @@
                   <div className="max-w-5xl mx-auto flex justify-between items-center">
                       <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppState(AppState.DASHBOARD)}>
                           <Rocket className="text-blue-600"/>
-                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras</span>
+                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras <span className="text-blue-500">1</span></span>
                       </div>
                       <div className="flex gap-4">
                          {appState !== AppState.BREAK_TIME && (
