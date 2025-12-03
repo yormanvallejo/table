@@ -123,7 +123,7 @@
       // Definición de niveles según el libro Mi Jardín (Páginas 4 a 20 aprox)
       const BOOK_LEVELS = {
         1: { name: "Las Vocales", prompt: "Solo usa vocales (a, e, i, o, u). Palabras como: a, e, i, o, u. Frases muy simples o listado de vocales.", letters: "a,e,i,o,u" },
-        2: { name: "La M de Mamá", prompt: "Usa SOLO vocales y la letra M. Palabras: mamá, ama, mima, emo, mío, miau. Frases: 'mi mamá me ama', 'amo a mi mamá'.", letters: "m" },
+        2: { name: "La M de Mamá", prompt: "Usa SOLO vocales y la letra M. Palabras: mamá, ama, mima, emo, mío, miau. Frases: 'mi papá me ama' NO (aún no vimos P), 'mi mamá me ama', 'amo a mi mamá'.", letters: "m" },
         3: { name: "La P de Papá", prompt: "Usa SOLO vocales, M y P. Palabras: papá, pipa, puma, mapa, pepa. Frases: 'mi papá ama a mamá', 'pepe mima a pipo'.", letters: "m,p" },
         4: { name: "La L de Loma", prompt: "Usa SOLO vocales, M, P y L. Palabras: loma, pila, pala, ala, ola, lulu. Frases: 'la pala de papá', 'lola lee', 'la mula'.", letters: "m,p,l" },
         5: { name: "La S de Sapo", prompt: "Usa SOLO vocales, M, P, L y S. Palabras: sapo, sopa, sala, mesa, oso, sol. Frases: 'ese oso pasea', 'susi sale sola', 'la mesa es de mamá'.", letters: "m,p,l,s" },
@@ -136,13 +136,141 @@
         12: { name: "Repaso: Ya sé leer", prompt: "Texto celebratorio usando todas las letras anteriores. Párrafos cortos de 3 líneas. 'Ya sé leer. Mi mamá me felicita'.", letters: "todas las anteriores" }
       };
 
+      // Base de datos de respaldo (Fallback) exacta del libro "Mi Jardín"
+      const FALLBACK_LESSONS = {
+        1: {
+          title: "Las Vocales",
+          content: "a e i o u. A E I O U. a a. e e. i i. o o. u u. a e i o u.",
+          theme: "a, e, i, o, u",
+          questions: [
+            { question: "¿Cuál es la primera vocal?", options: ["o", "a", "u"], correctIndex: 1 },
+            { question: "¿Qué vocal es un círculo?", options: ["i", "o", "e"], correctIndex: 1 },
+            { question: "Lee esta vocal: E", options: ["a", "e", "i"], correctIndex: 1 }
+          ]
+        },
+        2: {
+          title: "Mamá me ama",
+          content: "mi mamá me ama. amo a mi mamá. mi mamá me mima. mimo a mamá. miau. amo. mima.",
+          theme: "ma, me, mi, mo, mu",
+          questions: [
+            { question: "¿Quién me ama?", options: ["Papá", "Mamá", "El oso"], correctIndex: 1 },
+            { question: "¿A quién amo?", options: ["A mi mamá", "A la mesa", "A la sopa"], correctIndex: 0 },
+            { question: "¿Qué hace mamá?", options: ["Me mima", "Corre", "Salta"], correctIndex: 0 }
+          ]
+        },
+        3: {
+          title: "Papá ama a mamá",
+          content: "papá ama a mamá. mamá ama a papá. mi papá me ama. amo a mi papá. pepe. pipa. mapa.",
+          theme: "pa, pe, pi, po, pu",
+          questions: [
+            { question: "¿A quién ama mamá?", options: ["A la pipa", "A papá", "Al mapa"], correctIndex: 1 },
+            { question: "¿Qué tiene papá?", options: ["Una pipa", "Una sopa", "Una lima"], correctIndex: 0 },
+            { question: "¿Quién me ama también?", options: ["El mapa", "Mi papá", "La mesa"], correctIndex: 1 }
+          ]
+        },
+        4: {
+          title: "La Paloma",
+          content: "lola lee. la paloma. la loma. la pala. mi papá lima la pala. mamá pela la papa. lulú. ala. ola.",
+          theme: "la, le, li, lo, lu",
+          questions: [
+            { question: "¿Qué hace Lola?", options: ["Come", "Lee", "Salta"], correctIndex: 1 },
+            { question: "¿Qué lima papá?", options: ["La pala", "La pila", "La mesa"], correctIndex: 0 },
+            { question: "¿Qué pela mamá?", options: ["La papa", "La manzana", "El coco"], correctIndex: 0 }
+          ]
+        },
+        5: {
+          title: "El Oso",
+          content: "ese oso pasea. mi oso se asoma. lila pasa la sopa. la mesa es de mamá. suma. sapo. peso.",
+          theme: "sa, se, si, so, su",
+          questions: [
+            { question: "¿Quién pasea?", options: ["El sapo", "El oso", "La mesa"], correctIndex: 1 },
+            { question: "¿De quién es la mesa?", options: ["De papá", "De mamá", "De lila"], correctIndex: 1 },
+            { question: "¿Qué pasa Lila?", options: ["La sopa", "La sal", "El sol"], correctIndex: 0 }
+          ]
+        },
+        6: {
+          title: "La Pelota",
+          content: "toma la pelota. mamá toma té. toma ese tomate. pepe mete la moto. pato. pito. tapa.",
+          theme: "ta, te, ti, to, tu",
+          questions: [
+            { question: "¿Qué toma mamá?", options: ["Café", "Té", "Agua"], correctIndex: 1 },
+            { question: "¿Qué mete Pepe?", options: ["La pata", "La moto", "La maleta"], correctIndex: 1 },
+            { question: "¿Qué es rojo?", options: ["El tomate", "El pasto", "El cielo"], correctIndex: 0 }
+          ]
+        },
+        7: {
+          title: "La Nena",
+          content: "la nena pasea sola. papá ama al nene. elena toma nata. lina ama a su papá. luna. mano. pino.",
+          theme: "na, ne, ni, no, nu",
+          questions: [
+            { question: "¿Quién pasea sola?", options: ["La nena", "La mona", "La tía"], correctIndex: 0 },
+            { question: "¿Qué toma Elena?", options: ["Sopa", "Nata", "Té"], correctIndex: 1 },
+            { question: "¿Qué hay en el cielo de noche?", options: ["El sol", "La luna", "El nene"], correctIndex: 1 }
+          ]
+        },
+        8: {
+          title: "El Dado",
+          content: "me duele el dedo. dame esa pelota. adela me saluda. pásame ese dado. duda. día. lado.",
+          theme: "da, de, di, do, du",
+          questions: [
+            { question: "¿Qué me duele?", options: ["El dado", "El dedo", "El todo"], correctIndex: 1 },
+            { question: "¿Qué me da Adela?", options: ["Un saludo", "Una moneda", "Una pera"], correctIndex: 0 },
+            { question: "¿Qué pido que me pasen?", options: ["Ese dado", "Ese dedo", "Esa duda"], correctIndex: 0 }
+          ]
+        },
+        9: {
+          title: "La Casa",
+          content: "lolita come poco. la copa es de mamá. papá tiene una casa. paco come coco. casa. cama. cola.",
+          theme: "ca, co, cu",
+          questions: [
+            { question: "¿Quién come poco?", options: ["Lolita", "Paco", "Papá"], correctIndex: 0 },
+            { question: "¿Qué come Paco?", options: ["Capa", "Coco", "Cuna"], correctIndex: 1 },
+            { question: "¿Qué tiene papá?", options: ["Una casa", "Una cosa", "Una cola"], correctIndex: 0 }
+          ]
+        },
+        10: {
+          title: "El Bebé",
+          content: "la casa es bonita. beso a mi mamá. el bebé toma sopa. el bate es bonito. bola. lobo. nube.",
+          theme: "ba, be, bi, bo, bu",
+          questions: [
+            { question: "¿Qué toma el bebé?", options: ["Sopa", "Agua", "Nada"], correctIndex: 0 },
+            { question: "¿Cómo es la casa?", options: ["Fea", "Bonita", "Alta"], correctIndex: 1 },
+            { question: "¿A quién beso?", options: ["A mi mamá", "Al lobo", "A la nube"], correctIndex: 0 }
+          ]
+        },
+        11: {
+          title: "La Vaca",
+          content: "esta vaca es de papá. el pavo es un ave. la vela es de dina. elena lava el vaso. uva. vida. ave.",
+          theme: "va, ve, vi, vo, vu",
+          questions: [
+            { question: "¿De quién es la vaca?", options: ["De mamá", "De papá", "De pepe"], correctIndex: 1 },
+            { question: "¿Qué es el pavo?", options: ["Un ave", "Un pez", "Un oso"], correctIndex: 0 },
+            { question: "¿Qué lava Elena?", options: ["La ropa", "El vaso", "La uva"], correctIndex: 1 }
+          ]
+        },
+        12: {
+          title: "¡Ya sé leer!",
+          content: "día a día he estudiado. ahora ya sé leer. ¡qué alegría! mi mamá me felicita. estoy muy contento.",
+          theme: "Lectura final",
+          questions: [
+            { question: "¿Qué sabes hacer ahora?", options: ["Correr", "Leer", "Volar"], correctIndex: 1 },
+            { question: "¿Quién te felicita?", options: ["Mi mamá", "Mi perro", "Nadie"], correctIndex: 0 },
+            { question: "¿Cómo estás?", options: ["Triste", "Contento", "Cansado"], correctIndex: 1 }
+          ]
+        }
+      };
+
       const generateReadingMaterial = async (level) => {
         const lesson = BOOK_LEVELS[level] || BOOK_LEVELS[1];
         
+        // Semilla aleatoria para variar un poco la instrucción a la IA
+        const seed = Math.floor(Math.random() * 1000);
+
         const prompt = `Genera una lección de lectura estilo libro "Mi Jardín".
         Nivel: ${level} - ${lesson.name}.
         Restricción Estricta de Letras: Solo puedes usar vocales y: ${lesson.letters}.
         Instrucción Específica: ${lesson.prompt}.
+        Seed: ${seed}.
         
         Devuelve un JSON con:
         - title: Título simple (Ej: "Lección de la M").
@@ -157,6 +285,7 @@
             contents: prompt,
             config: {
               systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.7, // Creatividad moderada para variar frases
               responseMimeType: "application/json",
               responseSchema: {
                 type: Type.OBJECT,
@@ -187,17 +316,10 @@
           throw new Error("No text returned from Gemini");
         } catch (error) {
           console.error("Error generating content:", error);
-          // Fallback en caso de error para Nivel 2 (M) como ejemplo seguro
+          // USAR FALLBACK ESPECÍFICO DEL NIVEL
           return {
-            id: "fallback-m",
-            title: "Mamá me ama",
-            content: "Mi mamá me ama. Amo a mi mamá. Mi mamá me mima. Mimo a mamá.",
-            theme: "ma, me, mi, mo, mu",
-            questions: [
-              { question: "¿Quién me ama?", options: ["Papá", "Mamá", "El oso"], correctIndex: 1 },
-              { question: "¿A quién amo?", options: ["A mi mamá", "A la mesa", "A la sopa"], correctIndex: 0 },
-              { question: "¿Qué hace mamá?", options: ["Me mima", "Corre", "Salta"], correctIndex: 0 }
-            ]
+            id: `fallback-${level}`,
+            ...FALLBACK_LESSONS[level]
           };
         }
       };
