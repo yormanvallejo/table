@@ -1,0 +1,7 @@
+export const AppState = {
+  ONBOARDING: 'ONBOARDING',
+  DASHBOARD: 'DASHBOARD',
+  READING: 'READING',
+  BREAK_TIME: 'BREAK_TIME',
+  STATS: 'STATS'
+};

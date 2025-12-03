@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LeoAventuras</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
       body {
@@ -18,16 +19,32 @@
           -ms-overflow-style: none;
           scrollbar-width: none;
       }
+      .animate-blob {
+        animation: blob 7s infinite;
+      }
+      @keyframes blob {
+        0% { transform: translate(0px, 0px) scale(1); }
+        33% { transform: translate(30px, -50px) scale(1.1); }
+        66% { transform: translate(-20px, 20px) scale(0.9); }
+        100% { transform: translate(0px, 0px) scale(1); }
+      }
+      .animation-delay-2000 {
+        animation-delay: 2s;
+      }
     </style>
+  <script>
+    // Polyfill para process.env
+    window.process = window.process || { env: { API_KEY: '' } };
+  </script>
   <script type="importmap">
 {
   "imports": {
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
     "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.1/client",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
   }
 }
 </script>
@@ -35,6 +52,734 @@
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+
+    <!-- Aplicación Completa Integrada -->
+    <script type="text/babel" data-type="module">
+      import React, { useState, useEffect, useRef } from 'react';
+      import ReactDOM from 'react-dom/client';
+      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2 } from 'lucide-react';
+      import { GoogleGenAI, Type } from "@google/genai";
+      import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+      // --- 1. CONFIGURACIÓN Y SERVICIOS ---
+
+      const AppState = {
+        ONBOARDING: 'ONBOARDING',
+        DASHBOARD: 'DASHBOARD',
+        READING: 'READING',
+        BREAK_TIME: 'BREAK_TIME',
+        STATS: 'STATS'
+      };
+
+      const INITIAL_USER = {
+        name: '',
+        currentLevel: 1,
+        xp: 0,
+        streak: 1,
+        readingHistory: []
+      };
+
+      // Inicializar IA
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+      const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en TDAH. 
+      Tu objetivo es crear contenido de lectura motivador, corto y estructurado para un niño de 10 años.
+      Usa lenguaje positivo, temas fascinantes (espacio, animales, videojuegos, superhéroes) y frases claras.
+      Evita párrafos densos.`;
+
+      const generateReadingMaterial = async (level, interests = "general") => {
+        const levelPrompts = {
+          1: "Nivel muy básico: Palabras simples, sílabas claras, frases de máximo 3 palabras.",
+          2: "Nivel básico: Frases cortas y directas. Vocabulario cotidiano.",
+          3: "Nivel intermedio: Párrafos cortos (3-4 líneas). Historias con inicio y fin simple.",
+          4: "Nivel avanzado: Historias con diálogo simple y descripciones moderadas.",
+          5: "Nivel experto: Lectura fluida, textos informativos o narrativos completos adecuados para 10 años."
+        };
+
+        const prompt = `Genera un ejercicio de lectura.
+        Nivel: ${level} (${levelPrompts[level]}).
+        Tema sugerido: ${interests}.
+        
+        Devuelve un JSON con:
+        - title: Título divertido.
+        - content: El texto a leer.
+        - theme: El tema principal.
+        - questions: Array de 2 preguntas de comprensión sencillas con 3 opciones y el índice de la correcta.`;
+
+        try {
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  content: { type: Type.STRING },
+                  theme: { type: Type.STRING },
+                  questions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        question: { type: Type.STRING },
+                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        correctIndex: { type: Type.INTEGER }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          });
+
+          if (response.text) {
+            return JSON.parse(response.text);
+          }
+          throw new Error("No text returned from Gemini");
+        } catch (error) {
+          console.error("Error generating content:", error);
+          // Fallback en caso de error
+          return {
+            id: "fallback-1",
+            title: "El Perro Veloz",
+            content: "El perro corre mucho. Le gusta la pelota. Salta muy alto.",
+            theme: "Animales",
+            questions: [
+              {
+                question: "¿Qué hace el perro?",
+                options: ["Duerme", "Corre mucho", "Come"],
+                correctIndex: 1
+              },
+              {
+                  question: "¿Qué le gusta?",
+                  options: ["La pelota", "El gato", "La lluvia"],
+                  correctIndex: 0
+              }
+            ]
+          };
+        }
+      };
+
+      const evaluateReadingSession = async (originalText, transcript, durationSeconds) => {
+        try {
+          const prompt = `Texto original: "${originalText}"
+          Texto leído por el niño (transcrito): "${transcript}"
+          Duración: ${durationSeconds} segundos.
+          
+          Evalúa:
+          1. Precisión (aproximada).
+          2. Velocidad (¿Es adecuada para un niño de 10 años?).
+          3. Mensaje motivacional corto (1 frase).`;
+
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+               responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  accuracyScore: { type: Type.NUMBER, description: "0 to 100" },
+                  feedback: { type: Type.STRING },
+                  wpm: { type: Type.NUMBER }
+                }
+              }
+            }
+          });
+           if (response.text) {
+            return JSON.parse(response.text);
+          }
+          return { accuracyScore: 80, feedback: "¡Buen esfuerzo!", wpm: 0 };
+        } catch (e) {
+          return { accuracyScore: 0, feedback: "Error analizando.", wpm: 0 };
+        }
+      };
+
+      // --- 2. COMPONENTES ---
+
+      const ReadingView = ({ material, onComplete, onRequestBreak }) => {
+        const [isRecording, setIsRecording] = useState(false);
+        const [transcript, setTranscript] = useState('');
+        const [timeElapsed, setTimeElapsed] = useState(0);
+        const [feedback, setFeedback] = useState(null);
+        const [analyzing, setAnalyzing] = useState(false);
+        const [showQuiz, setShowQuiz] = useState(false);
+        const [quizScore, setQuizScore] = useState(0);
+
+        const recognitionRef = useRef(null);
+        const timerRef = useRef(null);
+
+        useEffect(() => {
+          const { webkitSpeechRecognition, SpeechRecognition } = window;
+          const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition;
+
+          if (SpeechRecognitionAPI) {
+            recognitionRef.current = new SpeechRecognitionAPI();
+            recognitionRef.current.continuous = true;
+            recognitionRef.current.interimResults = true;
+            recognitionRef.current.lang = 'es-ES';
+
+            recognitionRef.current.onresult = (event) => {
+              let interimTranscript = '';
+              let finalTranscript = '';
+
+              for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                  finalTranscript += event.results[i][0].transcript;
+                } else {
+                  interimTranscript += event.results[i][0].transcript;
+                }
+              }
+              setTranscript(prev => prev + finalTranscript + interimTranscript);
+            };
+            
+            recognitionRef.current.onerror = (event) => {
+                console.error("Speech recognition error", event.error);
+            }
+          }
+
+          return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+            if (recognitionRef.current) recognitionRef.current.stop();
+          };
+        }, []);
+
+        const toggleRecording = () => {
+          if (isRecording) {
+            if (recognitionRef.current) recognitionRef.current.stop();
+            if (timerRef.current) clearInterval(timerRef.current);
+            setIsRecording(false);
+            analyzeReading();
+          } else {
+            setTranscript('');
+            setTimeElapsed(0);
+            setFeedback(null);
+            if (recognitionRef.current) {
+              try {
+                  recognitionRef.current.start();
+              } catch(e) {
+                  console.warn("Already started", e);
+              }
+            }
+            
+            timerRef.current = setInterval(() => {
+              setTimeElapsed(prev => prev + 1);
+            }, 1000);
+            setIsRecording(true);
+          }
+        };
+
+        const analyzeReading = async () => {
+          setAnalyzing(true);
+          const words = material.content.split(' ').length;
+          const minutes = timeElapsed / 60;
+          const roughWPM = minutes > 0 ? Math.round(words / minutes) : 0;
+
+          const result = await evaluateReadingSession(material.content, transcript, timeElapsed);
+          
+          setFeedback({
+            msg: result.feedback,
+            wpm: result.wpm || roughWPM
+          });
+          setAnalyzing(false);
+          setShowQuiz(true);
+        };
+
+        const handleQuizAnswer = (qIndex, aIndex) => {
+            if (material.questions[qIndex].correctIndex === aIndex) {
+                setQuizScore(prev => prev + 1);
+            }
+        };
+
+        const finishSession = () => {
+            const calculatedAccuracy = showQuiz ? (quizScore / material.questions.length) * 100 : 80;
+            onComplete(feedback?.wpm || 0, calculatedAccuracy);
+        };
+
+        if (showQuiz) {
+            return (
+                <div className="max-w-2xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-blob">
+                    <h2 className="text-2xl font-bold text-purple-600 mb-4">¡Preguntas Rápidas!</h2>
+                    <div className="space-y-6">
+                        {material.questions.map((q, idx) => (
+                            <div key={idx} className="bg-purple-50 p-4 rounded-xl">
+                                <p className="font-bold text-lg mb-3">{q.question}</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {q.options.map((opt, optIdx) => (
+                                        <button
+                                          key={optIdx}
+                                          onClick={(e) => {
+                                              handleQuizAnswer(idx, optIdx);
+                                              e.target.disabled = true;
+                                              if (optIdx === q.correctIndex) {
+                                                  e.target.classList.add('bg-green-200');
+                                              } else {
+                                                  e.target.classList.add('bg-red-200');
+                                              }
+                                          }}
+                                          className="p-3 text-left bg-white border-2 border-purple-200 rounded-lg hover:bg-purple-100 transition"
+                                        >
+                                            {opt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-8 flex justify-center">
+                        <button 
+                          onClick={finishSession}
+                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 flex items-center gap-2"
+                        >
+                            <CheckCircle /> ¡Terminar Nivel!
+                        </button>
+                    </div>
+                </div>
+            )
+        }
+
+        return (
+          <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
+            <div className="w-full bg-white p-6 rounded-3xl shadow-lg border-b-4 border-blue-200 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Volume2 size={120} />
+              </div>
+              <h2 className="text-3xl font-extrabold text-blue-600 mb-2">{material.title}</h2>
+              <span className="inline-block bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-semibold">
+                  {material.theme}
+              </span>
+            </div>
+
+            <div className="w-full bg-amber-50 p-8 rounded-3xl shadow-inner border-4 border-amber-200 min-h-[300px] flex items-center justify-center relative">
+              <p className="text-2xl md:text-3xl leading-relaxed font-medium text-gray-800 text-center font-sans">
+                {material.content}
+              </p>
+              {isRecording && (
+                   <div className="absolute bottom-4 right-4 animate-pulse">
+                      <span className="bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                          Grabando
+                      </span>
+                  </div>
+              )}
+            </div>
+
+            <div className="flex flex-col items-center gap-4 w-full">
+                <div className="flex gap-6 items-center">
+                  {!isRecording && !analyzing && (
+                      <button
+                          onClick={toggleRecording}
+                          className="group relative flex items-center justify-center w-20 h-20 bg-green-500 rounded-full shadow-green-400 shadow-xl transform transition hover:scale-110 active:scale-95"
+                      >
+                          <Mic className="text-white w-10 h-10" />
+                          <span className="absolute -bottom-8 text-green-700 font-bold whitespace-nowrap">Leer</span>
+                      </button>
+                  )}
+
+                  {isRecording && (
+                      <button
+                          onClick={toggleRecording}
+                          className="flex items-center justify-center w-20 h-20 bg-red-500 rounded-full shadow-red-400 shadow-xl transform transition hover:scale-110 active:scale-95"
+                      >
+                          <Square className="text-white w-8 h-8 fill-current" />
+                      </button>
+                  )}
+                </div>
+
+                {analyzing && (
+                    <div className="flex flex-col items-center text-purple-600">
+                        <RefreshCw className="animate-spin w-10 h-10 mb-2" />
+                        <p className="font-bold">El mago está escuchando tu lectura...</p>
+                    </div>
+                )}
+
+                {isRecording && (
+                    <div className="text-4xl font-mono font-bold text-gray-400 mt-4">
+                        {Math.floor(timeElapsed / 60).toString().padStart(2, '0')}:{(timeElapsed % 60).toString().padStart(2, '0')}
+                    </div>
+                )}
+            </div>
+
+            <button onClick={onRequestBreak} className="mt-8 text-gray-400 hover:text-gray-600 underline text-sm">
+                Necesito un descanso ahora
+            </button>
+          </div>
+        );
+      };
+
+      const BreakGame = ({ onFinishBreak }) => {
+        const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
+        const [score, setScore] = useState(0);
+        const [targetPos, setTargetPos] = useState({ top: '50%', left: '50%' });
+        const [gameActive, setGameActive] = useState(false);
+        
+        const containerRef = useRef(null);
+
+        useEffect(() => {
+          const timer = setInterval(() => {
+            setTimeLeft((prev) => {
+              if (prev <= 1) {
+                clearInterval(timer);
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+
+          return () => clearInterval(timer);
+        }, []);
+
+        const moveTarget = () => {
+            if (!containerRef.current) return;
+            const newTop = Math.random() * 80 + 10;
+            const newLeft = Math.random() * 80 + 10;
+            setTargetPos({ top: `${newTop}%`, left: `${newLeft}%` });
+        };
+
+        const handleTargetClick = () => {
+            setScore(s => s + 10);
+            moveTarget();
+        };
+
+        const startGame = () => {
+            setGameActive(true);
+            moveTarget();
+        };
+
+        const formatTime = (seconds) => {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900 text-white rounded-3xl p-6 relative overflow-hidden">
+              <div className="absolute top-4 w-full flex justify-between px-8 z-20">
+                  <div className="flex items-center gap-2">
+                      <Trophy className="text-yellow-400" />
+                      <span className="font-bold text-xl">{score} pts</span>
+                  </div>
+                  <div className="font-mono text-xl bg-indigo-800 px-3 py-1 rounded-lg">
+                      Descanso: {formatTime(timeLeft)}
+                  </div>
+              </div>
+
+              <div 
+                  ref={containerRef}
+                  className="w-full max-w-2xl h-96 bg-indigo-800 rounded-2xl relative shadow-inner border-4 border-indigo-700 overflow-hidden cursor-crosshair"
+              >
+                  {!gameActive ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/40 backdrop-blur-sm">
+                          <h3 className="text-3xl font-bold mb-4 text-center">Atrapa la Burbuja</h3>
+                          <p className="mb-6 text-indigo-200">Mejora tu concentración atrapando los objetivos.</p>
+                          <button 
+                              onClick={startGame}
+                              className="bg-yellow-400 hover:bg-yellow-300 text-indigo-900 font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105"
+                          >
+                              JUGAR
+                          </button>
+                      </div>
+                  ) : (
+                      <button
+                          onClick={handleTargetClick}
+                          style={{ top: targetPos.top, left: targetPos.left }}
+                          className="absolute w-16 h-16 transform -translate-x-1/2 -translate-y-1/2 focus:outline-none transition-all duration-300 ease-out"
+                      >
+                           <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-500 rounded-full shadow-lg animate-pulse border-4 border-white flex items-center justify-center">
+                              <Target className="w-8 h-8 text-white" />
+                           </div>
+                      </button>
+                  )}
+              </div>
+
+              <div className="mt-8 text-center z-20">
+                  <p className="text-indigo-300 mb-4 text-sm">El botón para volver aparecerá pronto...</p>
+                  <button 
+                      onClick={onFinishBreak}
+                      className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg text-sm transition"
+                  >
+                      Saltar descanso (Volver a Leer)
+                  </button>
+              </div>
+              
+              <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-purple-600 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+              <div className="absolute -top-20 -right-20 w-64 h-64 bg-pink-600 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+          </div>
+        );
+      };
+
+      const Dashboard = ({ user, onSelectLevel, onChangeLevel }) => {
+        const levels = [
+          { level: 1, name: "Explorador de Palabras", desc: "Sílabas y palabras sueltas" },
+          { level: 2, name: "Constructor de Frases", desc: "Oraciones cortas y divertidas" },
+          { level: 3, name: "Pequeño Lector", desc: "Párrafos simples" },
+          { level: 4, name: "Aventurero de Historias", desc: "Cuentos cortos" },
+          { level: 5, name: "Maestro de la Lectura", desc: "Texto corrido y fluido" },
+        ];
+
+        const chartData = user.readingHistory.slice(-5).map((log, i) => ({
+            name: `Sesión ${i + 1}`,
+            wpm: log.wpm
+        }));
+
+        return (
+          <div className="max-w-5xl mx-auto p-4 space-y-8">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center">
+              <div>
+                  <h1 className="text-4xl font-extrabold mb-2">¡Hola, {user.name}!</h1>
+                  <p className="text-blue-100 text-lg">Estás en racha: {user.streak} días 🔥</p>
+              </div>
+              <div className="mt-4 md:mt-0 flex items-center bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-sm">
+                  <Star className="text-yellow-300 w-8 h-8 mr-2 fill-current" />
+                  <span className="text-3xl font-bold">{user.xp} XP</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-4">
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">Tu Mapa de Aventura</h2>
+                  <div className="grid gap-4">
+                      {levels.map((lvl) => {
+                          const isCurrent = lvl.level === user.currentLevel;
+                          return (
+                              <div 
+                                  key={lvl.level}
+                                  className={`relative p-4 rounded-2xl border-b-4 transition-all duration-200 flex items-center justify-between
+                                      ${isCurrent ? 'bg-white border-blue-400 shadow-lg scale-105 z-10' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-white'}
+                                  `}
+                              >
+                                  <div className="flex items-center gap-4">
+                                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl
+                                          ${isCurrent ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'}
+                                      `}>
+                                          {lvl.level}
+                                      </div>
+                                      <div>
+                                          <h3 className={`font-bold text-lg ${isCurrent ? 'text-blue-700' : ''}`}>{lvl.name}</h3>
+                                          <p className="text-sm">{lvl.desc}</p>
+                                      </div>
+                                  </div>
+
+                                  {isCurrent ? (
+                                      <button 
+                                          onClick={() => onSelectLevel(lvl.level)}
+                                          className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-full font-bold shadow-md flex items-center gap-2"
+                                      >
+                                          <PlayCircle size={20}/> Jugar
+                                      </button>
+                                  ) : (
+                                      <button 
+                                          onClick={() => onChangeLevel(lvl.level)}
+                                          className="text-blue-400 font-semibold text-sm hover:underline"
+                                      >
+                                          Cambiar aquí
+                                      </button>
+                                  )}
+                              </div>
+                          );
+                      })}
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 h-fit">
+                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <BarChart2 className="text-purple-500"/> Tu Evolución
+                    </h2>
+                    <div className="h-48 w-full">
+                      {chartData.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={chartData}>
+                                  <XAxis dataKey="name" hide />
+                                  <YAxis hide />
+                                  <Tooltip 
+                                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                  />
+                                  <Line type="monotone" dataKey="wpm" stroke="#8884d8" strokeWidth={3} dot={{r: 4}} />
+                              </LineChart>
+                          </ResponsiveContainer>
+                      ) : (
+                          <div className="flex items-center justify-center h-full text-gray-400 text-center text-sm">
+                              Completa lecciones para ver tu velocidad aquí.
+                          </div>
+                      )}
+                    </div>
+                    <p className="text-center text-sm text-gray-500 mt-2">Velocidad de lectura (palabras/min)</p>
+                </div>
+            </div>
+          </div>
+        );
+      };
+
+      // --- 3. APP PRINCIPAL ---
+
+      function App() {
+        const [user, setUser] = useState(INITIAL_USER);
+        const [appState, setAppState] = useState(AppState.ONBOARDING);
+        const [loading, setLoading] = useState(false);
+        const [currentMaterial, setCurrentMaterial] = useState(null);
+        const [nameInput, setNameInput] = useState('');
+
+        useEffect(() => {
+          const saved = localStorage.getItem('leo_user');
+          if (saved) {
+            setUser(JSON.parse(saved));
+            setAppState(AppState.DASHBOARD);
+          }
+        }, []);
+
+        useEffect(() => {
+          if (user.name) {
+            localStorage.setItem('leo_user', JSON.stringify(user));
+          }
+        }, [user]);
+
+        const handleStartOnboarding = () => {
+          if (nameInput.trim()) {
+            setUser({ ...user, name: nameInput });
+            setAppState(AppState.DASHBOARD);
+          }
+        };
+
+        const startReadingSession = async (level) => {
+          setLoading(true);
+          const topics = ["Superhéroes", "Espacio", "Dinosaurios", "Videojuegos", "Animales Marinos"];
+          const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+          
+          const material = await generateReadingMaterial(level, randomTopic);
+          setCurrentMaterial(material);
+          setLoading(false);
+          setAppState(AppState.READING);
+        };
+
+        const handleLevelChange = (newLevel) => {
+            setUser(prev => ({ ...prev, currentLevel: newLevel }));
+        };
+
+        const handleReadingComplete = (wpm, accuracy) => {
+          const xpGained = Math.round((accuracy + wpm) / 2);
+          
+          setUser(prev => ({
+              ...prev,
+              xp: prev.xp + xpGained,
+              readingHistory: [
+                  ...prev.readingHistory, 
+                  { date: new Date().toISOString(), wpm, accuracy, level: prev.currentLevel }
+              ]
+          }));
+          setAppState(AppState.DASHBOARD);
+        };
+
+        const handleRequestBreak = () => {
+            setAppState(AppState.BREAK_TIME);
+        };
+
+        const handleBreakFinish = () => {
+            setAppState(AppState.DASHBOARD);
+        };
+
+        if (appState === AppState.ONBOARDING) {
+          return (
+            <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center p-4">
+              <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-b-8 border-blue-500">
+                  <div className="flex justify-center mb-6">
+                      <div className="bg-blue-100 p-4 rounded-full">
+                          <Rocket className="text-blue-600 w-16 h-16" />
+                      </div>
+                  </div>
+                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras</h1>
+                  <p className="text-gray-500 mb-8 text-lg">¡Aprender a leer es tu súper poder!</p>
+                  
+                  <div className="space-y-4">
+                      <label className="block text-left font-bold text-gray-700 ml-1">¿Cómo te llamas?</label>
+                      <input 
+                          type="text" 
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          placeholder="Escribe tu nombre aquí..."
+                          className="w-full text-xl p-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                          onKeyDown={(e) => e.key === 'Enter' && handleStartOnboarding()}
+                      />
+                      <button 
+                          onClick={handleStartOnboarding}
+                          disabled={!nameInput.trim()}
+                          className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xl shadow-lg shadow-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transform transition active:scale-95"
+                      >
+                          ¡Comenzar!
+                      </button>
+                  </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (loading) {
+            return (
+                <div className="min-h-screen flex flex-col items-center justify-center bg-blue-50">
+                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin mb-4" />
+                    <h2 className="text-2xl font-bold text-blue-700 animate-pulse">Creando tu aventura...</h2>
+                    <p className="text-blue-400">Nuestros robots están escribiendo una historia genial.</p>
+                </div>
+            )
+        }
+
+        return (
+          <div className="min-h-screen bg-[#F0F9FF] pb-10">
+              <div className="bg-white shadow-sm p-4 sticky top-0 z-50 mb-6">
+                  <div className="max-w-5xl mx-auto flex justify-between items-center">
+                      <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppState(AppState.DASHBOARD)}>
+                          <Rocket className="text-blue-600"/>
+                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras</span>
+                      </div>
+                      <div className="flex gap-4">
+                         {appState !== AppState.BREAK_TIME && (
+                           <button 
+                              onClick={() => setAppState(AppState.BREAK_TIME)}
+                              className="bg-purple-100 text-purple-700 px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition"
+                           >
+                               <Brain size={16} /> Descanso
+                           </button>
+                         )}
+                      </div>
+                  </div>
+              </div>
+
+              {appState === AppState.DASHBOARD && (
+                  <Dashboard 
+                      user={user} 
+                      onSelectLevel={startReadingSession} 
+                      onChangeLevel={handleLevelChange} 
+                  />
+              )}
+
+              {appState === AppState.READING && currentMaterial && (
+                  <ReadingView 
+                      material={currentMaterial} 
+                      onComplete={handleReadingComplete}
+                      onRequestBreak={handleRequestBreak}
+                  />
+              )}
+
+              {appState === AppState.BREAK_TIME && (
+                  <div className="max-w-4xl mx-auto p-4 h-[80vh]">
+                      <BreakGame onFinishBreak={handleBreakFinish} />
+                  </div>
+              )}
+          </div>
+        );
+      }
+
+      // --- 4. RENDERIZADO ---
+      const rootElement = document.getElementById('root');
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>
+      );
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
