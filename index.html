@@ -57,7 +57,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile } from 'lucide-react';
+      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile, Ear } from 'lucide-react';
       import { GoogleGenAI, Type } from "@google/genai";
       import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -81,6 +81,26 @@
 
       // Inicializar IA
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+      // Función helper para TTS (Texto a Voz)
+      const speakText = (text, onEnd) => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel(); // Detener cualquier audio previo
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'es-ES'; // Español
+          utterance.rate = 0.9; // Un poco más lento para niños
+          utterance.pitch = 1.1; // Un poco más agudo/amigable
+          
+          if (onEnd) {
+            utterance.onend = onEnd;
+          }
+          
+          window.speechSynthesis.speak(utterance);
+        } else {
+          console.warn("Navegador no soporta TTS");
+          if (onEnd) onEnd();
+        }
+      };
 
       const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en TDAH. 
       Tu objetivo es crear contenido de lectura motivador, corto y estructurado para un niño de 10 años.
@@ -185,13 +205,19 @@
 
           CRITERIOS DE EVALUACIÓN (0 a 10):
           1. Precisión: ¿Leyó las palabras correctas?
-          2. Fluidez: Velocidad y ritmo (Pausas excesivas bajan puntos).
-          3. Comprensión: Basado en el Quiz (${quizScore}/${totalQuestions}).
-          4. Atención: ¿Completó el texto? ¿Se distrajo (palabras extrañas en transcripción)?
-          5. Memoria: Capacidad de retención (reflejada en el quiz y precisión final).
-          6. Autorregulación: ¿Logró terminar la tarea sin abandonar? (Si hay transcripción completa, es alto).
+          2. Fluidez: Velocidad y ritmo.
+          3. Comprensión: Basado en el Quiz.
+          4. Atención: ¿Completó el texto?
+          5. Memoria.
+          6. Autorregulación.
 
-          Devuelve un JSON con scores (0-10) y un feedback CORTO y MOTIVADOR para cada uno.`;
+          IMPORTANTE: Genera un 'spokenFeedback' (string) que sea lo que el tutor le dirá AL NIÑO en voz alta. 
+          Debe ser:
+          1. Amable y motivador.
+          2. Señalar 1 corrección específica si hubo error (ej: "Noté que dijiste 'casa' pero era 'caza'", "Intenta pausar en los puntos").
+          3. Máximo 2 frases.
+
+          Devuelve JSON.`;
 
           const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
@@ -203,6 +229,7 @@
                 properties: {
                   overallScore: { type: Type.NUMBER },
                   wpm: { type: Type.NUMBER },
+                  spokenFeedback: { type: Type.STRING, description: "Feedback corto para ser leído por TTS" },
                   metrics: {
                     type: Type.OBJECT,
                     properties: {
@@ -227,6 +254,7 @@
           return { 
             overallScore: 8, 
             wpm: Math.round((originalText.split(' ').length / durationSeconds) * 60), 
+            spokenFeedback: "¡Buen trabajo leyendo! Sigue practicando las pausas.",
             metrics: {
               precision: { score: 8, feedback: "¡Bien leído!" },
               fluency: { score: 7, feedback: "Buen ritmo." },
@@ -242,13 +270,15 @@
       // --- 2. COMPONENTES ---
 
       const ReadingView = ({ material, onComplete, onRequestBreak }) => {
-        const [viewState, setViewState] = useState('READING'); // READING, QUIZ, ANALYZING, RESULTS
+        // Estados: READING -> QUIZ -> ANALYZING -> MODELING (App lee) -> FEEDBACK (App corrige) -> RESULTS
+        const [viewState, setViewState] = useState('READING'); 
         const [isRecording, setIsRecording] = useState(false);
         const [transcript, setTranscript] = useState('');
         const [timeElapsed, setTimeElapsed] = useState(0);
         const [quizScore, setQuizScore] = useState(0);
         const [evaluation, setEvaluation] = useState(null);
-        const [userAnswers, setUserAnswers] = useState({}); // { 0: 1, 1: 0 ... }
+        const [userAnswers, setUserAnswers] = useState({});
+        const [playbackMessage, setPlaybackMessage] = useState('');
 
         const recognitionRef = useRef(null);
         const timerRef = useRef(null);
@@ -281,18 +311,19 @@
           return () => {
             if (timerRef.current) clearInterval(timerRef.current);
             if (recognitionRef.current) recognitionRef.current.stop();
+            window.speechSynthesis.cancel();
           };
         }, []);
 
         const toggleRecording = () => {
           if (isRecording) {
-            // Stop Recording -> Go to Quiz
+            // Detener grabación -> Ir al Quiz
             if (recognitionRef.current) recognitionRef.current.stop();
             if (timerRef.current) clearInterval(timerRef.current);
             setIsRecording(false);
             setViewState('QUIZ');
           } else {
-            // Start Recording
+            // Empezar grabación
             setTranscript('');
             setTimeElapsed(0);
             if (recognitionRef.current) {
@@ -315,7 +346,8 @@
 
         const submitQuiz = async () => {
             setViewState('ANALYZING');
-            // Perform full evaluation with Gemini
+            
+            // 1. Evaluar con IA
             const result = await evaluateReadingSession(
               material.content, 
               transcript, 
@@ -324,11 +356,28 @@
               material.questions.length
             );
             setEvaluation(result);
-            setViewState('RESULTS');
+
+            // 2. Transición a Modelado (App lee el texto original)
+            setViewState('MODELING');
+            setPlaybackMessage("Escucha cómo lo leo yo...");
+            
+            speakText(material.content, () => {
+                // 3. Al terminar de leer el texto, Transición a Feedback (App da consejos)
+                setViewState('FEEDBACK');
+                setPlaybackMessage("Aquí un consejo para mejorar...");
+                
+                // Pequeña pausa antes del consejo
+                setTimeout(() => {
+                   speakText(result.spokenFeedback, () => {
+                       // 4. Al terminar consejo, mostrar resultados finales
+                       setViewState('RESULTS');
+                   });
+                }, 1000);
+            });
         };
 
         const finishSession = () => {
-             // Calculate final accuracy purely for XP/History based on the AI's weighted score
+            window.speechSynthesis.cancel();
             onComplete(evaluation.wpm, evaluation.overallScore * 10);
         };
 
@@ -398,6 +447,30 @@
            );
         }
 
+        if (viewState === 'MODELING' || viewState === 'FEEDBACK') {
+            return (
+               <div className="flex flex-col items-center justify-center min-h-[400px] text-blue-600 animate-pulse">
+                   <div className="bg-blue-100 p-8 rounded-full mb-6 relative">
+                       <Volume2 className="w-20 h-20 text-blue-600" />
+                       <div className="absolute top-0 right-0 animate-ping h-6 w-6 rounded-full bg-blue-400 opacity-75"></div>
+                   </div>
+                   <h3 className="text-3xl font-bold mb-4">{viewState === 'MODELING' ? "Escucha la lectura correcta..." : "Consejo del Mago..."}</h3>
+                   <p className="text-xl text-gray-600 text-center max-w-md">
+                       {viewState === 'MODELING' ? "Compara cómo lo lees tú con cómo suena." : evaluation?.spokenFeedback}
+                   </p>
+                   <button 
+                       onClick={() => {
+                           window.speechSynthesis.cancel();
+                           setViewState('RESULTS');
+                       }}
+                       className="mt-8 text-sm text-gray-400 underline hover:text-gray-600"
+                   >
+                       Saltar audio
+                   </button>
+               </div>
+            );
+        }
+
         if (viewState === 'QUIZ') {
             const allAnswered = Object.keys(userAnswers).length === material.questions.length;
             
@@ -432,7 +505,7 @@
                           disabled={!allAnswered}
                           className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105"
                         >
-                            Ver mis Resultados
+                            Evaluar Lectura
                         </button>
                     </div>
                 </div>
@@ -443,7 +516,7 @@
           <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
             <div className="w-full bg-white p-6 rounded-3xl shadow-lg border-b-4 border-blue-200 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <Volume2 size={120} />
+                  <BookOpen size={120} />
               </div>
               <h2 className="text-3xl font-extrabold text-blue-600 mb-2">{material.title}</h2>
               <span className="inline-block bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-semibold">
