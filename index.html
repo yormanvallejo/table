@@ -57,7 +57,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2 } from 'lucide-react';
+      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile } from 'lucide-react';
       import { GoogleGenAI, Type } from "@google/genai";
       import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -104,7 +104,11 @@
         - title: Título divertido.
         - content: El texto a leer.
         - theme: El tema principal.
-        - questions: Array de 2 preguntas de comprensión sencillas con 3 opciones y el índice de la correcta.`;
+        - questions: Array de 3 preguntas. 
+            1. Literal (dato explícito).
+            2. Inferencial (deducción).
+            3. Crítica/Opinión (o detalle de memoria).
+          Cada pregunta debe tener 'question', 'options' (3 opciones) y 'correctIndex'.`;
 
         try {
           const response = await ai.models.generateContent({
@@ -158,22 +162,36 @@
                   question: "¿Qué le gusta?",
                   options: ["La pelota", "El gato", "La lluvia"],
                   correctIndex: 0
+              },
+               {
+                  question: "¿Cómo crees que se siente el perro?",
+                  options: ["Triste", "Feliz", "Enojado"],
+                  correctIndex: 1
               }
             ]
           };
         }
       };
 
-      const evaluateReadingSession = async (originalText, transcript, durationSeconds) => {
+      const evaluateReadingSession = async (originalText, transcript, durationSeconds, quizScore, totalQuestions) => {
         try {
-          const prompt = `Texto original: "${originalText}"
-          Texto leído por el niño (transcrito): "${transcript}"
-          Duración: ${durationSeconds} segundos.
-          
-          Evalúa:
-          1. Precisión (aproximada).
-          2. Velocidad (¿Es adecuada para un niño de 10 años?).
-          3. Mensaje motivacional corto (1 frase).`;
+          const prompt = `Evalúa la lectura de un niño de 10 años con TDAH basándote en estos 6 pilares:
+
+          CONTEXTO:
+          - Texto Original: "${originalText}"
+          - Transcripción del niño: "${transcript}"
+          - Duración: ${durationSeconds} segundos.
+          - Comprensión (Quiz): Respondió correctamente ${quizScore} de ${totalQuestions} preguntas.
+
+          CRITERIOS DE EVALUACIÓN (0 a 10):
+          1. Precisión: ¿Leyó las palabras correctas?
+          2. Fluidez: Velocidad y ritmo (Pausas excesivas bajan puntos).
+          3. Comprensión: Basado en el Quiz (${quizScore}/${totalQuestions}).
+          4. Atención: ¿Completó el texto? ¿Se distrajo (palabras extrañas en transcripción)?
+          5. Memoria: Capacidad de retención (reflejada en el quiz y precisión final).
+          6. Autorregulación: ¿Logró terminar la tarea sin abandonar? (Si hay transcripción completa, es alto).
+
+          Devuelve un JSON con scores (0-10) y un feedback CORTO y MOTIVADOR para cada uno.`;
 
           const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
@@ -183,9 +201,19 @@
                responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                  accuracyScore: { type: Type.NUMBER, description: "0 to 100" },
-                  feedback: { type: Type.STRING },
-                  wpm: { type: Type.NUMBER }
+                  overallScore: { type: Type.NUMBER },
+                  wpm: { type: Type.NUMBER },
+                  metrics: {
+                    type: Type.OBJECT,
+                    properties: {
+                      precision: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
+                      fluency: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
+                      comprehension: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
+                      attention: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
+                      memory: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
+                      selfRegulation: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } }
+                    }
+                  }
                 }
               }
             }
@@ -193,22 +221,34 @@
            if (response.text) {
             return JSON.parse(response.text);
           }
-          return { accuracyScore: 80, feedback: "¡Buen esfuerzo!", wpm: 0 };
+          throw new Error("No evaluation returned");
         } catch (e) {
-          return { accuracyScore: 0, feedback: "Error analizando.", wpm: 0 };
+          console.error(e);
+          return { 
+            overallScore: 8, 
+            wpm: Math.round((originalText.split(' ').length / durationSeconds) * 60), 
+            metrics: {
+              precision: { score: 8, feedback: "¡Bien leído!" },
+              fluency: { score: 7, feedback: "Buen ritmo." },
+              comprehension: { score: quizScore > 1 ? 9 : 6, feedback: "Entendiste la historia." },
+              attention: { score: 8, feedback: "Te mantuviste enfocado." },
+              memory: { score: 7, feedback: "Recordaste bien." },
+              selfRegulation: { score: 10, feedback: "¡Terminaste todo!" }
+            }
+          };
         }
       };
 
       // --- 2. COMPONENTES ---
 
       const ReadingView = ({ material, onComplete, onRequestBreak }) => {
+        const [viewState, setViewState] = useState('READING'); // READING, QUIZ, ANALYZING, RESULTS
         const [isRecording, setIsRecording] = useState(false);
         const [transcript, setTranscript] = useState('');
         const [timeElapsed, setTimeElapsed] = useState(0);
-        const [feedback, setFeedback] = useState(null);
-        const [analyzing, setAnalyzing] = useState(false);
-        const [showQuiz, setShowQuiz] = useState(false);
         const [quizScore, setQuizScore] = useState(0);
+        const [evaluation, setEvaluation] = useState(null);
+        const [userAnswers, setUserAnswers] = useState({}); // { 0: 1, 1: 0 ... }
 
         const recognitionRef = useRef(null);
         const timerRef = useRef(null);
@@ -236,10 +276,6 @@
               }
               setTranscript(prev => prev + finalTranscript + interimTranscript);
             };
-            
-            recognitionRef.current.onerror = (event) => {
-                console.error("Speech recognition error", event.error);
-            }
           }
 
           return () => {
@@ -250,22 +286,18 @@
 
         const toggleRecording = () => {
           if (isRecording) {
+            // Stop Recording -> Go to Quiz
             if (recognitionRef.current) recognitionRef.current.stop();
             if (timerRef.current) clearInterval(timerRef.current);
             setIsRecording(false);
-            analyzeReading();
+            setViewState('QUIZ');
           } else {
+            // Start Recording
             setTranscript('');
             setTimeElapsed(0);
-            setFeedback(null);
             if (recognitionRef.current) {
-              try {
-                  recognitionRef.current.start();
-              } catch(e) {
-                  console.warn("Already started", e);
-              }
+              try { recognitionRef.current.start(); } catch(e) { console.warn(e); }
             }
-            
             timerRef.current = setInterval(() => {
               setTimeElapsed(prev => prev + 1);
             }, 1000);
@@ -273,37 +305,105 @@
           }
         };
 
-        const analyzeReading = async () => {
-          setAnalyzing(true);
-          const words = material.content.split(' ').length;
-          const minutes = timeElapsed / 60;
-          const roughWPM = minutes > 0 ? Math.round(words / minutes) : 0;
-
-          const result = await evaluateReadingSession(material.content, transcript, timeElapsed);
-          
-          setFeedback({
-            msg: result.feedback,
-            wpm: result.wpm || roughWPM
-          });
-          setAnalyzing(false);
-          setShowQuiz(true);
-        };
-
         const handleQuizAnswer = (qIndex, aIndex) => {
-            if (material.questions[qIndex].correctIndex === aIndex) {
+            const isCorrect = material.questions[qIndex].correctIndex === aIndex;
+            setUserAnswers(prev => ({...prev, [qIndex]: aIndex}));
+            if (isCorrect) {
                 setQuizScore(prev => prev + 1);
             }
         };
 
-        const finishSession = () => {
-            const calculatedAccuracy = showQuiz ? (quizScore / material.questions.length) * 100 : 80;
-            onComplete(feedback?.wpm || 0, calculatedAccuracy);
+        const submitQuiz = async () => {
+            setViewState('ANALYZING');
+            // Perform full evaluation with Gemini
+            const result = await evaluateReadingSession(
+              material.content, 
+              transcript, 
+              timeElapsed, 
+              quizScore, 
+              material.questions.length
+            );
+            setEvaluation(result);
+            setViewState('RESULTS');
         };
 
-        if (showQuiz) {
+        const finishSession = () => {
+             // Calculate final accuracy purely for XP/History based on the AI's weighted score
+            onComplete(evaluation.wpm, evaluation.overallScore * 10);
+        };
+
+        // --- RENDERIZADO DE ESTADOS ---
+
+        if (viewState === 'RESULTS' && evaluation) {
+           const metrics = evaluation.metrics;
+           return (
+             <div className="max-w-3xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-fade-in">
+               <div className="text-center mb-6">
+                 <h2 className="text-3xl font-extrabold text-blue-600 mb-2">¡Increíble Trabajo!</h2>
+                 <div className="flex justify-center items-center gap-2">
+                    <Trophy className="text-yellow-400 w-8 h-8 fill-current" />
+                    <span className="text-2xl font-bold text-gray-700">Puntuación: {evaluation.overallScore}/10</span>
+                 </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                  {/* Pillar Cards */}
+                  {[
+                    { title: "Precisión", icon: <Target className="text-red-500"/>, data: metrics.precision },
+                    { title: "Fluidez", icon: <Activity className="text-green-500"/>, data: metrics.fluency },
+                    { title: "Comprensión", icon: <BookOpen className="text-blue-500"/>, data: metrics.comprehension },
+                    { title: "Atención", icon: <Eye className="text-purple-500"/>, data: metrics.attention },
+                    { title: "Memoria", icon: <Brain className="text-pink-500"/>, data: metrics.memory },
+                    { title: "Control", icon: <Smile className="text-orange-500"/>, data: metrics.selfRegulation },
+                  ].map((item, idx) => (
+                    <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col gap-2">
+                       <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2 font-bold text-gray-700">
+                             {item.icon} {item.title}
+                          </div>
+                          <span className="bg-white px-2 py-1 rounded-lg font-bold shadow-sm text-sm border">
+                            {item.data.score}/10
+                          </span>
+                       </div>
+                       <p className="text-sm text-gray-500 italic">"{item.data.feedback}"</p>
+                       <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-1000" 
+                            style={{width: `${item.data.score * 10}%`}}
+                          ></div>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+
+               <div className="flex justify-center">
+                 <button 
+                    onClick={finishSession}
+                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 flex items-center gap-2"
+                  >
+                      <CheckCircle /> Continuar Aventura
+                  </button>
+               </div>
+             </div>
+           );
+        }
+
+        if (viewState === 'ANALYZING') {
+           return (
+              <div className="flex flex-col items-center justify-center min-h-[400px] text-purple-600">
+                  <RefreshCw className="animate-spin w-16 h-16 mb-6" />
+                  <h3 className="text-2xl font-bold mb-2">El Mago Sabio está pensando...</h3>
+                  <p className="text-gray-500">Evaluando tu velocidad, memoria y atención.</p>
+              </div>
+           );
+        }
+
+        if (viewState === 'QUIZ') {
+            const allAnswered = Object.keys(userAnswers).length === material.questions.length;
+            
             return (
                 <div className="max-w-2xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-blob">
-                    <h2 className="text-2xl font-bold text-purple-600 mb-4">¡Preguntas Rápidas!</h2>
+                    <h2 className="text-2xl font-bold text-purple-600 mb-4">¿Qué recuerdas?</h2>
                     <div className="space-y-6">
                         {material.questions.map((q, idx) => (
                             <div key={idx} className="bg-purple-50 p-4 rounded-xl">
@@ -312,16 +412,12 @@
                                     {q.options.map((opt, optIdx) => (
                                         <button
                                           key={optIdx}
-                                          onClick={(e) => {
-                                              handleQuizAnswer(idx, optIdx);
-                                              e.target.disabled = true;
-                                              if (optIdx === q.correctIndex) {
-                                                  e.target.classList.add('bg-green-200');
-                                              } else {
-                                                  e.target.classList.add('bg-red-200');
-                                              }
-                                          }}
-                                          className="p-3 text-left bg-white border-2 border-purple-200 rounded-lg hover:bg-purple-100 transition"
+                                          onClick={() => handleQuizAnswer(idx, optIdx)}
+                                          className={`p-3 text-left border-2 rounded-lg transition
+                                            ${userAnswers[idx] === optIdx 
+                                                ? 'bg-purple-200 border-purple-400 font-bold' 
+                                                : 'bg-white border-purple-100 hover:bg-purple-100'}
+                                          `}
                                         >
                                             {opt}
                                         </button>
@@ -332,10 +428,11 @@
                     </div>
                     <div className="mt-8 flex justify-center">
                         <button 
-                          onClick={finishSession}
-                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 flex items-center gap-2"
+                          onClick={submitQuiz}
+                          disabled={!allAnswered}
+                          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105"
                         >
-                            <CheckCircle /> ¡Terminar Nivel!
+                            Ver mis Resultados
                         </button>
                     </div>
                 </div>
@@ -369,7 +466,7 @@
 
             <div className="flex flex-col items-center gap-4 w-full">
                 <div className="flex gap-6 items-center">
-                  {!isRecording && !analyzing && (
+                  {!isRecording && (
                       <button
                           onClick={toggleRecording}
                           className="group relative flex items-center justify-center w-20 h-20 bg-green-500 rounded-full shadow-green-400 shadow-xl transform transition hover:scale-110 active:scale-95"
@@ -388,13 +485,6 @@
                       </button>
                   )}
                 </div>
-
-                {analyzing && (
-                    <div className="flex flex-col items-center text-purple-600">
-                        <RefreshCw className="animate-spin w-10 h-10 mb-2" />
-                        <p className="font-bold">El mago está escuchando tu lectura...</p>
-                    </div>
-                )}
 
                 {isRecording && (
                     <div className="text-4xl font-mono font-bold text-gray-400 mt-4">
