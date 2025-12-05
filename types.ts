@@ -1,42 +1,31 @@
-export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
-
-export interface UserProfile {
-  name: string;
-  currentLevel: DifficultyLevel;
-  xp: number;
-  streak: number;
-  readingHistory: ReadingLog[];
+export enum ModelType {
+  SYLLABIC = 'silabico',
+  FLUENCY = 'fluidez'
 }
 
-export interface ReadingLog {
-  date: string;
-  wpm: number; // Words per minute
-  accuracy: number; // Percentage
-  level: DifficultyLevel;
+export interface SyllableWord {
+  full: string;
+  parts: string[]; // e.g., ["ma", "má"]
 }
 
-export interface ReadingMaterial {
+export interface LessonItem {
+  id: string;
+  text: string;
+  image?: string; // URL
+  type: 'vowel' | 'word' | 'sentence';
+  syllables?: string[]; // For Model 1
+  words?: string[]; // For Model 2 breakdown
+}
+
+export interface Level {
   id: string;
   title: string;
-  content: string;
-  questions: {
-    question: string;
-    options: string[];
-    correctIndex: number;
-  }[];
-  theme: string;
+  description: string;
+  color: string;
+  items: LessonItem[];
 }
 
-export interface GameState {
-  isPlaying: boolean;
-  score: number;
-  timeLeft: number;
-}
-
-export enum AppState {
-  ONBOARDING = 'ONBOARDING',
-  DASHBOARD = 'DASHBOARD',
-  READING = 'READING',
-  BREAK_TIME = 'BREAK_TIME',
-  STATS = 'STATS'
+export interface AIResponse {
+  feedback: string;
+  stars: number;
 }

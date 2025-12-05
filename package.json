@@ -1,5 +1,5 @@
 {
-  "name": "leoaventuras:-lectura-divertida",
+  "name": "aprende-a-leer-con-ia",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,11 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lucide-react": "^0.555.0",
-    "react": "^19.2.1",
-    "@google/genai": "^1.30.0",
-    "recharts": "^3.5.1",
-    "react-dom": "^19.2.1"
+    "@google/genai": "0.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

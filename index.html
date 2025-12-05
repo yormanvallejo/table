@@ -1,1045 +1,780 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LeoAventuras 5 - Mi Jardín</title>
+    <title>Aprende a Leer - Versión Mejorada</title>
+    
+    <!-- 1. Estilos Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'kid-blue': '#4CC9F0',
+              'kid-pink': '#F72585',
+              'kid-yellow': '#FFD60A',
+              'kid-green': '#06D6A0',
+              'kid-purple': '#7209B7',
+              'kid-orange': '#FB5607',
+            },
+            fontFamily: {
+              sans: ['Comic Sans MS', 'Comic Sans', 'cursive', 'sans-serif'],
+            },
+            animation: {
+              'bounce-slow': 'bounce 3s infinite',
+            }
+          }
+        }
+      }
+    </script>
+
+    <!-- 2. Librerías React (Versiones UMD Universales) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- 3. Babel para JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Fredoka', sans-serif;
-        background-color: #F0F9FF;
-      }
-      .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-      }
-      .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-      }
-      .animate-blob {
-        animation: blob 7s infinite;
-      }
-      @keyframes blob {
-        0% { transform: translate(0px, 0px) scale(1); }
-        33% { transform: translate(30px, -50px) scale(1.1); }
-        66% { transform: translate(-20px, 20px) scale(0.9); }
-        100% { transform: translate(0px, 0px) scale(1); }
-      }
-      .animation-delay-2000 {
-        animation-delay: 2s;
-      }
-    </style>
-  <script>
-    // Polyfill para process.env
-    window.process = window.process || { env: { API_KEY: '' } };
-  </script>
-  <script type="importmap">
+
+    <!-- 4. Google Gemini SDK -->
+    <script type="importmap">
 {
   "imports": {
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.1/client",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
+    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
+    <script type="module">
+      import { GoogleGenAI } from "@google/genai";
+      window.GoogleGenAI = GoogleGenAI;
+    </script>
+
+    <style>
+      body { background-color: #f0fdfa; user-select: none; }
+      .btn-press:active { transform: scale(0.95); }
+      /* Estilo para el slider */
+      input[type=range] {
+        height: 34px;
+        -webkit-appearance: none;
+        margin: 10px 0;
+        width: 100%;
+        background: transparent;
+      }
+      input[type=range]:focus { outline: none; }
+      input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 12px;
+        cursor: pointer;
+        background: #E5E7EB;
+        border-radius: 25px;
+      }
+      input[type=range]::-webkit-slider-thumb {
+        height: 28px;
+        width: 28px;
+        border-radius: 50%;
+        background: #F72585;
+        cursor: pointer;
+        -webkit-appearance: none;
+        margin-top: -8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      }
+    </style>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
+<body>
     <div id="root"></div>
 
-    <!-- Aplicación Completa Integrada -->
-    <script type="text/babel" data-type="module">
-      import React, { useState, useEffect, useRef } from 'react';
-      import ReactDOM from 'react-dom/client';
-      import { Mic, Square, Play, RefreshCw, CheckCircle, Volume2, Target, Trophy, Star, PlayCircle, BarChart2, Rocket, Brain, Loader2, Activity, Eye, BookOpen, Smile, Ear, Info, Lock } from 'lucide-react';
-      import { GoogleGenAI, Type } from "@google/genai";
-      import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+    <!-- 5. LÓGICA DE LA APLICACIÓN -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
 
-      // --- 1. CONFIGURACIÓN Y SERVICIOS ---
+        // --- DATOS Y CONSTANTES ---
+        const API_KEY = ""; // PON TU API KEY AQUÍ
 
-      const AppState = {
-        ONBOARDING: 'ONBOARDING',
-        DASHBOARD: 'DASHBOARD',
-        READING: 'READING',
-        BREAK_TIME: 'BREAK_TIME',
-        STATS: 'STATS'
-      };
+        const ModelType = {
+          SYLLABIC: 'silabico',
+          FLUENCY: 'fluidez'
+        };
 
-      const INITIAL_USER = {
-        name: '',
-        currentLevel: 1,
-        xp: 0,
-        streak: 1,
-        readingHistory: []
-      };
-
-      // Inicializar IA
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-      // Helper para convertir Blob a Base64
-      const blobToBase64 = (blob) => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = reader.result.split(',')[1];
-            resolve(base64String);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      };
-
-      // Función helper para TTS (Texto a Voz)
-      const speakText = (text, onEnd) => {
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'es-ES';
-          utterance.rate = 0.8; // Más lento para el método silábico
-          utterance.pitch = 1.1;
-          
-          if (onEnd) {
-            utterance.onend = onEnd;
-          }
-          
-          window.speechSynthesis.speak(utterance);
-        } else {
-          console.warn("Navegador no soporta TTS");
-          if (onEnd) onEnd();
-        }
-      };
-
-      const SYSTEM_INSTRUCTION = `Eres un experto pedagogo especializado en el método de lectura "Mi Jardín" (fonético-silábico).
-      Tu tarea es generar lecturas estrictamente limitadas a las letras permitidas en cada lección.
-      NO DEBES usar letras que el niño no haya aprendido aún en el nivel solicitado.
-      Usa frases cortas, repetitivas y muy sonoras.`;
-
-      // Definición de niveles según el libro Mi Jardín (Páginas 4 a 20 aprox)
-      const BOOK_LEVELS = {
-        1: { name: "Las Vocales", prompt: "Solo usa vocales (a, e, i, o, u). Palabras como: a, e, i, o, u. Frases muy simples o listado de vocales.", letters: "a,e,i,o,u" },
-        2: { name: "La M de Mamá", prompt: "Usa SOLO vocales y la letra M. Palabras: mamá, ama, mima, emo, mío, miau. Frases: 'mi papá me ama' NO (aún no vimos P), 'mi mamá me ama', 'amo a mi mamá'.", letters: "m" },
-        3: { name: "La P de Papá", prompt: "Usa SOLO vocales, M y P. Palabras: papá, pipa, puma, mapa, pepa. Frases: 'mi papá ama a mamá', 'pepe mima a pipo'.", letters: "m,p" },
-        4: { name: "La L de Loma", prompt: "Usa SOLO vocales, M, P y L. Palabras: loma, pila, pala, ala, ola, lulu. Frases: 'la pala de papá', 'lola lee', 'la mula'.", letters: "m,p,l" },
-        5: { name: "La S de Sapo", prompt: "Usa SOLO vocales, M, P, L y S. Palabras: sapo, sopa, sala, mesa, oso, sol. Frases: 'ese oso pasea', 'susi sale sola', 'la mesa es de mamá'.", letters: "m,p,l,s" },
-        6: { name: "La T de Tomate", prompt: "Usa SOLO vocales, M, P, L, S y T. Palabras: tomate, moto, pato, tapa, tío. Frases: 'tito toma té', 'toma la pelota', 'la moto de mi tío'.", letters: "m,p,l,s,t" },
-        7: { name: "La N de Nena", prompt: "Usa SOLO vocales, M, P, L, S, T y N. Palabras: nena, nene, mano, luna, pino. Frases: 'la nena pasea', 'el nene no come'.", letters: "m,p,l,s,t,n" },
-        8: { name: "La D de Dado", prompt: "Usa SOLO vocales, M, P, L, S, T, N y D. Palabras: dado, dedo, duda, día, lado. Frases: 'dame el dado', 'me duele el dedo', 'adela saluda'.", letters: "m,p,l,s,t,n,d" },
-        9: { name: "La C (ca, co, cu)", prompt: "Usa SOLO vocales, M, P, L, S, T, N, D y C (sonido fuerte). Palabras: casa, coco, cama, cuna, saco, poco. Frases: 'paco come coco', 'la casa es bonita'.", letters: "m,p,l,s,t,n,d,c" },
-        10: { name: "La B de Bebé", prompt: "Usa letras aprendidas + B. Palabras: bebé, bola, bata, lobo, sube. Frases: 'el bebé bebe', 'la bola sube'.", letters: "m,p,l,s,t,n,d,c,b" },
-        11: { name: "La V de Vaca", prompt: "Usa letras aprendidas + V. Palabras: vaca, uva, pavo, nave. Frases: 'la vaca de papá', 'el pavo es un ave'.", letters: "m,p,l,s,t,n,d,c,b,v" },
-        12: { name: "Repaso: Ya sé leer", prompt: "Texto celebratorio usando todas las letras anteriores. Párrafos cortos de 3 líneas. 'Ya sé leer. Mi mamá me felicita'.", letters: "todas las anteriores" }
-      };
-
-      // Base de datos de respaldo (Fallback) exacta del libro "Mi Jardín"
-      const FALLBACK_LESSONS = {
-        1: {
-          title: "Las Vocales",
-          content: "a e i o u. A E I O U. a a. e e. i i. o o. u u. a e i o u.",
-          theme: "a, e, i, o, u",
-          questions: [
-            { question: "¿Cuál es la primera vocal?", options: ["o", "a", "u"], correctIndex: 1 },
-            { question: "¿Qué vocal es un círculo?", options: ["i", "o", "e"], correctIndex: 1 },
-            { question: "Lee esta vocal: E", options: ["a", "e", "i"], correctIndex: 1 }
-          ]
-        },
-        2: {
-          title: "Mamá me ama",
-          content: "mi mamá me ama. amo a mi mamá. mi mamá me mima. mimo a mamá. miau. amo. mima.",
-          theme: "ma, me, mi, mo, mu",
-          questions: [
-            { question: "¿Quién me ama?", options: ["Papá", "Mamá", "El oso"], correctIndex: 1 },
-            { question: "¿A quién amo?", options: ["A mi mamá", "A la mesa", "A la sopa"], correctIndex: 0 },
-            { question: "¿Qué hace mamá?", options: ["Me mima", "Corre", "Salta"], correctIndex: 0 }
-          ]
-        },
-        3: {
-          title: "Papá ama a mamá",
-          content: "papá ama a mamá. mamá ama a papá. mi papá me ama. amo a mi papá. pepe. pipa. mapa.",
-          theme: "pa, pe, pi, po, pu",
-          questions: [
-            { question: "¿A quién ama mamá?", options: ["A la pipa", "A papá", "Al mapa"], correctIndex: 1 },
-            { question: "¿Qué tiene papá?", options: ["Una pipa", "Una sopa", "Una lima"], correctIndex: 0 },
-            { question: "¿Quién me ama también?", options: ["El mapa", "Mi papá", "La mesa"], correctIndex: 1 }
-          ]
-        },
-        4: {
-          title: "La Paloma",
-          content: "lola lee. la paloma. la loma. la pala. mi papá lima la pala. mamá pela la papa. lulú. ala. ola.",
-          theme: "la, le, li, lo, lu",
-          questions: [
-            { question: "¿Qué hace Lola?", options: ["Come", "Lee", "Salta"], correctIndex: 1 },
-            { question: "¿Qué lima papá?", options: ["La pala", "La pila", "La mesa"], correctIndex: 0 },
-            { question: "¿Qué pela mamá?", options: ["La papa", "La manzana", "El coco"], correctIndex: 0 }
-          ]
-        },
-        5: {
-          title: "El Oso",
-          content: "ese oso pasea. mi oso se asoma. lila pasa la sopa. la mesa es de mamá. suma. sapo. peso.",
-          theme: "sa, se, si, so, su",
-          questions: [
-            { question: "¿Quién pasea?", options: ["El sapo", "El oso", "La mesa"], correctIndex: 1 },
-            { question: "¿De quién es la mesa?", options: ["De papá", "De mamá", "De lila"], correctIndex: 1 },
-            { question: "¿Qué pasa Lila?", options: ["La sopa", "La sal", "El sol"], correctIndex: 0 }
-          ]
-        },
-        6: {
-          title: "La Pelota",
-          content: "toma la pelota. mamá toma té. toma ese tomate. pepe mete la moto. pato. pito. tapa.",
-          theme: "ta, te, ti, to, tu",
-          questions: [
-            { question: "¿Qué toma mamá?", options: ["Café", "Té", "Agua"], correctIndex: 1 },
-            { question: "¿Qué mete Pepe?", options: ["La pata", "La moto", "La maleta"], correctIndex: 1 },
-            { question: "¿Qué es rojo?", options: ["El tomate", "El pasto", "El cielo"], correctIndex: 0 }
-          ]
-        },
-        7: {
-          title: "La Nena",
-          content: "la nena pasea sola. papá ama al nene. elena toma nata. lina ama a su papá. luna. mano. pino.",
-          theme: "na, ne, ni, no, nu",
-          questions: [
-            { question: "¿Quién pasea sola?", options: ["La nena", "La mona", "La tía"], correctIndex: 0 },
-            { question: "¿Qué toma Elena?", options: ["Sopa", "Nata", "Té"], correctIndex: 1 },
-            { question: "¿Qué hay en el cielo de noche?", options: ["El sol", "La luna", "El nene"], correctIndex: 1 }
-          ]
-        },
-        8: {
-          title: "El Dado",
-          content: "me duele el dedo. dame esa pelota. adela me saluda. pásame ese dado. duda. día. lado.",
-          theme: "da, de, di, do, du",
-          questions: [
-            { question: "¿Qué me duele?", options: ["El dado", "El dedo", "El todo"], correctIndex: 1 },
-            { question: "¿Qué me da Adela?", options: ["Un saludo", "Una moneda", "Una pera"], correctIndex: 0 },
-            { question: "¿Qué pido que me pasen?", options: ["Ese dado", "Ese dedo", "Esa duda"], correctIndex: 0 }
-          ]
-        },
-        9: {
-          title: "La Casa",
-          content: "lolita come poco. la copa es de mamá. papá tiene una casa. paco come coco. casa. cama. cola.",
-          theme: "ca, co, cu",
-          questions: [
-            { question: "¿Quién come poco?", options: ["Lolita", "Paco", "Papá"], correctIndex: 0 },
-            { question: "¿Qué come Paco?", options: ["Capa", "Coco", "Cuna"], correctIndex: 1 },
-            { question: "¿Qué tiene papá?", options: ["Una casa", "Una cosa", "Una cola"], correctIndex: 0 }
-          ]
-        },
-        10: {
-          title: "El Bebé",
-          content: "la casa es bonita. beso a mi mamá. el bebé toma sopa. el bate es bonito. bola. lobo. nube.",
-          theme: "ba, be, bi, bo, bu",
-          questions: [
-            { question: "¿Qué toma el bebé?", options: ["Sopa", "Agua", "Nada"], correctIndex: 0 },
-            { question: "¿Cómo es la casa?", options: ["Fea", "Bonita", "Alta"], correctIndex: 1 },
-            { question: "¿A quién beso?", options: ["A mi mamá", "Al lobo", "A la nube"], correctIndex: 0 }
-          ]
-        },
-        11: {
-          title: "La Vaca",
-          content: "esta vaca es de papá. el pavo es un ave. la vela es de dina. elena lava el vaso. uva. vida. ave.",
-          theme: "va, ve, vi, vo, vu",
-          questions: [
-            { question: "¿De quién es la vaca?", options: ["De mamá", "De papá", "De pepe"], correctIndex: 1 },
-            { question: "¿Qué es el pavo?", options: ["Un ave", "Un pez", "Un oso"], correctIndex: 0 },
-            { question: "¿Qué lava Elena?", options: ["La ropa", "El vaso", "La uva"], correctIndex: 1 }
-          ]
-        },
-        12: {
-          title: "¡Ya sé leer!",
-          content: "día a día he estudiado. ahora ya sé leer. ¡qué alegría! mi mamá me felicita. estoy muy contento.",
-          theme: "Lectura final",
-          questions: [
-            { question: "¿Qué sabes hacer ahora?", options: ["Correr", "Leer", "Volar"], correctIndex: 1 },
-            { question: "¿Quién te felicita?", options: ["Mi mamá", "Mi perro", "Nadie"], correctIndex: 0 },
-            { question: "¿Cómo estás?", options: ["Triste", "Contento", "Cansado"], correctIndex: 1 }
-          ]
-        }
-      };
-
-      const generateReadingMaterial = async (level) => {
-        const lesson = BOOK_LEVELS[level] || BOOK_LEVELS[1];
+        const IMG_BASE = "https://picsum.photos/seed";
         
-        // Semilla aleatoria para variar un poco la instrucción a la IA
-        const seed = Math.floor(Math.random() * 1000);
-
-        const prompt = `Genera una lección de lectura estilo libro "Mi Jardín".
-        Nivel: ${level} - ${lesson.name}.
-        Restricción Estricta de Letras: Solo puedes usar vocales y: ${lesson.letters}.
-        Instrucción Específica: ${lesson.prompt}.
-        Seed: ${seed}.
-        
-        Devuelve un JSON con:
-        - title: Título simple (Ej: "Lección de la M").
-        - content: El texto a leer. Debe ser rítmico, repetitivo y silábico. Separa oraciones con puntos.
-        - theme: La letra o sílaba principal (Ej: "ma, me, mi, mo, mu").
-        - questions: Array de 3 preguntas muy sencillas (Literal, Inferencial, Visual).
-          Cada pregunta debe tener 'question', 'options' (3 opciones) y 'correctIndex'.`;
-
-        try {
-          const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
-              temperature: 0.7, // Creatividad moderada para variar frases
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  title: { type: Type.STRING },
-                  content: { type: Type.STRING },
-                  theme: { type: Type.STRING },
-                  questions: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        question: { type: Type.STRING },
-                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        correctIndex: { type: Type.INTEGER }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          });
-
-          if (response.text) {
-            return JSON.parse(response.text);
-          }
-          throw new Error("No text returned from Gemini");
-        } catch (error) {
-          console.error("Error generating content:", error);
-          // USAR FALLBACK ESPECÍFICO DEL NIVEL
-          return {
-            id: `fallback-${level}`,
-            ...FALLBACK_LESSONS[level]
-          };
-        }
-      };
-
-      const evaluateReadingSession = async (originalText, transcript, durationSeconds, quizScore, totalQuestions, audioBase64) => {
-        try {
-          const parts = [];
-          if (audioBase64) {
-             parts.push({
-               inlineData: {
-                 mimeType: "audio/webm",
-                 data: audioBase64
-               }
-             });
-          }
-
-          parts.push({
-            text: `Actúa como un maestro de primer grado corrigiendo lectura silábica.
-            Texto Original: "${originalText}"
-            Transcripción del niño: "${transcript}"
-            
-            TAREA:
-            1. Compara PALABRA POR PALABRA.
-            2. Genera un mensaje de audio ('spokenFeedback') que diga EXACTAMENTE en qué palabra falló.
-            3. Si sustituyó una palabra (ej: dijo 'come' en vez de 'corre'), dímelo explícitamente.
-            4. Sé muy motivador pero riguroso con la fonética.
-            
-            Output JSON.`
-          });
-
-          const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: { parts },
-            config: {
-              responseMimeType: "application/json",
-               responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  overallScore: { type: Type.NUMBER },
-                  wpm: { type: Type.NUMBER },
-                  diagnosticFeedback: { type: Type.STRING },
-                  spokenFeedback: { type: Type.STRING, description: "Feedback verbal específico sobre errores de palabras." },
-                  metrics: {
-                    type: Type.OBJECT,
-                    properties: {
-                      precision: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      fluency: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      tone: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      comprehension: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      attention: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } },
-                      memory: { type: Type.OBJECT, properties: { score: { type: Type.NUMBER }, feedback: { type: Type.STRING } } }
-                    }
-                  }
-                }
-              }
-            }
-          });
-           if (response.text) {
-            return JSON.parse(response.text);
-          }
-          throw new Error("No evaluation returned");
-        } catch (e) {
-          console.error(e);
-          return { 
-            overallScore: 8, 
-            wpm: 20, 
-            diagnosticFeedback: "Lectura completada.",
-            spokenFeedback: "¡Bien hecho! Sigue practicando las sílabas.",
-            metrics: {
-              precision: { score: 8, feedback: "Bien." },
-              fluency: { score: 7, feedback: "Ritmo constante." },
-              tone: { score: 7, feedback: "Bien." },
-              comprehension: { score: 8, feedback: "Bien." },
-              attention: { score: 8, feedback: "Bien." },
-              memory: { score: 7, feedback: "Bien." }
-            }
-          };
-        }
-      };
-
-      // --- 2. COMPONENTES ---
-
-      const ReadingView = ({ material, onComplete, onRequestBreak }) => {
-        const [viewState, setViewState] = useState('READING'); 
-        const [isRecording, setIsRecording] = useState(false);
-        const [transcript, setTranscript] = useState('');
-        const [timeElapsed, setTimeElapsed] = useState(0);
-        const [quizScore, setQuizScore] = useState(0);
-        const [evaluation, setEvaluation] = useState(null);
-        const [userAnswers, setUserAnswers] = useState({});
-        const [audioBlob, setAudioBlob] = useState(null);
-        const [audioUrl, setAudioUrl] = useState(null);
-
-        const recognitionRef = useRef(null);
-        const mediaRecorderRef = useRef(null);
-        const audioChunksRef = useRef([]);
-        const timerRef = useRef(null);
-
-        useEffect(() => {
-          return () => {
-             if (audioUrl) URL.revokeObjectURL(audioUrl);
-             window.speechSynthesis.cancel();
-          }
-        }, [audioUrl]);
-
-        useEffect(() => {
-            if (viewState === 'COMPARISON' && evaluation?.spokenFeedback) {
-                setTimeout(() => {
-                    speakText(evaluation.spokenFeedback);
-                }, 500);
-            }
-        }, [viewState, evaluation]);
-
-        const startRecording = async () => {
-           try {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              mediaRecorderRef.current = new MediaRecorder(stream);
-              audioChunksRef.current = [];
+        const LEVELS = [
+          {
+            id: 'level-1',
+            title: 'Nivel 1: Las Vocales',
+            description: 'Aprende las vocales con imágenes.',
+            color: 'bg-kid-blue',
+            items: [
+              { id: 'l1-1', type: 'vowel', text: 'a', image: `${IMG_BASE}/airplane/300/300`, syllables: ['a'] },
+              { id: 'l1-2', type: 'vowel', text: 'e', image: `${IMG_BASE}/elephant/300/300`, syllables: ['e'] },
+              { id: 'l1-3', type: 'vowel', text: 'i', image: `${IMG_BASE}/church/300/300`, syllables: ['i'] },
+              { id: 'l1-4', type: 'vowel', text: 'o', image: `${IMG_BASE}/bear/300/300`, syllables: ['o'] },
+              { id: 'l1-5', type: 'vowel', text: 'u', image: `${IMG_BASE}/grapes/300/300`, syllables: ['u'] },
+            ]
+          },
+          {
+            id: 'level-2',
+            title: 'Nivel 2: Sílabas (M)',
+            description: 'Palabras con Ma, Me, Mi, Mo, Mu.',
+            color: 'bg-kid-pink',
+            items: [
+              { id: 'l2-1', type: 'word', text: 'mamá', syllables: ['ma', 'má'], image: `${IMG_BASE}/mom/300/300` },
+              { id: 'l2-2', type: 'word', text: 'ama', syllables: ['a', 'ma'] },
+              { id: 'l2-3', type: 'word', text: 'mami', syllables: ['ma', 'mi'] },
+              { id: 'l2-4', type: 'word', text: 'amo', syllables: ['a', 'mo'] },
+              { id: 'l2-5', type: 'word', text: 'mima', syllables: ['mi', 'ma'] },
+              { id: 'l2-6', type: 'word', text: 'eme', syllables: ['e', 'me'] },
+              { id: 'l2-7', type: 'word', text: 'memo', syllables: ['me', 'mo'] },
+              { id: 'l2-8', type: 'word', text: 'mimo', syllables: ['mi', 'mo'] },
+              { id: 'l2-9', type: 'word', text: 'mío', syllables: ['mí', 'o'] },
+              { id: 'l2-10', type: 'word', text: 'ame', syllables: ['a', 'me'] },
+              { id: 'l2-11', type: 'word', text: 'mía', syllables: ['mí', 'a'] },
+              { id: 'l2-12', type: 'word', text: 'miau', syllables: ['miau'] },
+            ]
+          },
+          {
+            id: 'level-3',
+            title: 'Nivel 3: Frases (M)',
+            description: 'Leyendo oraciones con M.',
+            color: 'bg-kid-green',
+            items: [
+              { 
+                id: 'l3-1', 
+                type: 'sentence', 
+                text: 'amo a mi mamá', 
+                words: ['amo', 'a', 'mi', 'mamá'],
+                syllables: ['a', 'mo', ' ', 'a', ' ', 'mi', ' ', 'ma', 'má'],
+                image: `${IMG_BASE}/lovemom/400/200` 
+              },
+              { 
+                id: 'l3-2', 
+                type: 'sentence', 
+                text: 'mi mamá me ama', 
+                words: ['mi', 'mamá', 'me', 'ama'],
+                syllables: ['mi', ' ', 'ma', 'má', ' ', 'me', ' ', 'a', 'ma']
+              },
+              { 
+                id: 'l3-3', 
+                type: 'sentence', 
+                text: 'mimo a mi mamá', 
+                words: ['mimo', 'a', 'mi', 'mamá'],
+                syllables: ['mi', 'mo', ' ', 'a', ' ', 'mi', ' ', 'ma', 'má']
+              },
+              { 
+                id: 'l3-4', 
+                type: 'sentence', 
+                text: 'mi mamá me mima', 
+                words: ['mi', 'mamá', 'me', 'mima'],
+                syllables: ['mi', ' ', 'ma', 'má', ' ', 'me', ' ', 'mi', 'ma']
+              },
+            ]
+          },
+          {
+            id: 'level-4',
+            title: 'Nivel 4: Sílabas (P)',
+            description: 'Palabras con Pa, Pe, Pi, Po, Pu.',
+            color: 'bg-kid-purple',
+            items: [
+              { id: 'l4-s1', type: 'word', text: 'pa', syllables: ['pa'], image: `${IMG_BASE}/father/300/300` },
+              { id: 'l4-s2', type: 'word', text: 'pe', syllables: ['pe'], image: `${IMG_BASE}/ball/300/300` },
+              { id: 'l4-s3', type: 'word', text: 'pi', syllables: ['pi'], image: `${IMG_BASE}/pineapple/300/300` },
+              { id: 'l4-s4', type: 'word', text: 'po', syllables: ['po'], image: `${IMG_BASE}/chick/300/300` },
+              { id: 'l4-s5', type: 'word', text: 'pu', syllables: ['pu'], image: `${IMG_BASE}/fist/300/300` },
+              { id: 'l4-1', type: 'word', text: 'papá', syllables: ['pa', 'pá'] },
+              { id: 'l4-2', type: 'word', text: 'mopa', syllables: ['mo', 'pa'] },
+              { id: 'l4-3', type: 'word', text: 'popa', syllables: ['po', 'pa'] },
+              { id: 'l4-4', type: 'word', text: 'papi', syllables: ['pa', 'pi'] },
+              { id: 'l4-5', type: 'word', text: 'pepe', syllables: ['pe', 'pe'] },
+              { id: 'l4-6', type: 'word', text: 'pipa', syllables: ['pi', 'pa'] },
+              { id: 'l4-7', type: 'word', text: 'pepa', syllables: ['pe', 'pa'] },
+              { id: 'l4-8', type: 'word', text: 'mapa', syllables: ['ma', 'pa'] },
+              { id: 'l4-9', type: 'word', text: 'púa', syllables: ['pú', 'a'] },
+              { id: 'l4-10', type: 'word', text: 'pío', syllables: ['pí', 'o'] },
+              { id: 'l4-11', type: 'word', text: 'pía', syllables: ['pí', 'a'] },
+              { id: 'l4-12', type: 'word', text: 'puma', syllables: ['pu', 'ma'] },
+            ]
+          },
+          {
+            id: 'level-5',
+            title: 'Nivel 5: Sílabas (L)',
+            description: 'Palabras con La, Le, Li, Lo, Lu.',
+            color: 'bg-kid-orange',
+            items: [
+              // Sílabas con imágenes
+              { id: 'l5-s1', type: 'word', text: 'la', syllables: ['la'], image: `${IMG_BASE}/pencil/300/300` },
+              { id: 'l5-s2', type: 'word', text: 'le', syllables: ['le'], image: `${IMG_BASE}/milk/300/300` },
+              { id: 'l5-s3', type: 'word', text: 'li', syllables: ['li'], image: `${IMG_BASE}/lemon/300/300` },
+              { id: 'l5-s4', type: 'word', text: 'lo', syllables: ['lo'], image: `${IMG_BASE}/wolf/300/300` },
+              { id: 'l5-s5', type: 'word', text: 'lu', syllables: ['lu'], image: `${IMG_BASE}/moon/300/300` },
               
-              mediaRecorderRef.current.ondataavailable = (event) => {
-                 if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
-                 }
-              };
-
-              mediaRecorderRef.current.onstop = () => {
-                 const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                 setAudioBlob(blob);
-                 const url = URL.createObjectURL(blob);
-                 setAudioUrl(url);
-                 stream.getTracks().forEach(track => track.stop());
-              };
-
-              mediaRecorderRef.current.start();
-
-              const { webkitSpeechRecognition, SpeechRecognition } = window;
-              const SpeechRecognitionAPI = SpeechRecognition || webkitSpeechRecognition;
-
-              if (SpeechRecognitionAPI) {
-                recognitionRef.current = new SpeechRecognitionAPI();
-                recognitionRef.current.continuous = true;
-                recognitionRef.current.interimResults = true;
-                recognitionRef.current.lang = 'es-ES';
-
-                recognitionRef.current.onresult = (event) => {
-                  let transcriptData = '';
-                  for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    transcriptData += event.results[i][0].transcript;
-                  }
-                  setTranscript(prev => prev + transcriptData);
-                };
-                recognitionRef.current.start();
-              }
-
-              setTimeElapsed(0);
-              timerRef.current = setInterval(() => {
-                setTimeElapsed(prev => prev + 1);
-              }, 1000);
+              // Palabras del texto
+              { id: 'l5-1', type: 'word', text: 'loma', syllables: ['lo', 'ma'] },
+              { id: 'l5-2', type: 'word', text: 'lima', syllables: ['li', 'ma'] },
+              { id: 'l5-3', type: 'word', text: 'lame', syllables: ['la', 'me'] },
+              { id: 'l5-4', type: 'word', text: 'lomo', syllables: ['lo', 'mo'] },
               
-              setIsRecording(true);
-           } catch (err) {
-              console.error("Error accessing microphone:", err);
-              alert("Necesitamos acceso al micrófono.");
-           }
-        };
+              { id: 'l5-5', type: 'word', text: 'malo', syllables: ['ma', 'lo'] },
+              { id: 'l5-6', type: 'word', text: 'mula', syllables: ['mu', 'la'] },
+              { id: 'l5-7', type: 'word', text: 'pelo', syllables: ['pe', 'lo'] },
+              { id: 'l5-8', type: 'word', text: 'pila', syllables: ['pi', 'la'] },
+              
+              { id: 'l5-9', type: 'word', text: 'paloma', syllables: ['pa', 'lo', 'ma'] },
+              { id: 'l5-10', type: 'word', text: 'pomelo', syllables: ['po', 'me', 'lo'] },
 
-        const stopRecording = () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-               mediaRecorderRef.current.stop();
-            }
-            if (recognitionRef.current) {
-               recognitionRef.current.stop();
-            }
-            if (timerRef.current) {
-               clearInterval(timerRef.current);
-            }
-            setIsRecording(false);
-            setViewState('QUIZ');
-        };
-
-        const toggleRecording = () => {
-          if (isRecording) {
-            stopRecording();
-          } else {
-            setTranscript('');
-            startRecording();
+              { id: 'l5-11', type: 'word', text: 'lola', syllables: ['lo', 'la'] },
+              { id: 'l5-12', type: 'word', text: 'lalo', syllables: ['la', 'lo'] },
+              
+              // Frase
+              { 
+                id: 'l5-13', 
+                type: 'sentence', 
+                text: 'lola asea la sala', 
+                words: ['lola', 'asea', 'la', 'sala'],
+                syllables: ['lo', 'la', ' ', 'a', 'se', 'a', ' ', 'la', ' ', 'sa', 'la']
+              }
+            ]
+          },
+          {
+            id: 'level-6',
+            title: 'Nivel 6: Frases (P)',
+            description: 'Oraciones con Papá y Mamá.',
+            color: 'bg-kid-pink',
+            items: [
+              { 
+                id: 'l6-1', 
+                type: 'sentence', 
+                text: 'papá ama a mamá', 
+                words: ['papá', 'ama', 'a', 'mamá'],
+                syllables: ['pa', 'pá', ' ', 'a', 'ma', ' ', 'a', ' ', 'ma', 'má'],
+                image: `${IMG_BASE}/parents/400/250`
+              },
+              { 
+                id: 'l6-2', 
+                type: 'sentence', 
+                text: 'mamá ama a papi', 
+                words: ['mamá', 'ama', 'a', 'papi'],
+                syllables: ['ma', 'má', ' ', 'a', 'ma', ' ', 'a', ' ', 'pa', 'pi']
+              },
+              { 
+                id: 'l6-3', 
+                type: 'sentence', 
+                text: 'mi papá me ama', 
+                words: ['mi', 'papá', 'me', 'ama'],
+                syllables: ['mi', ' ', 'pa', 'pá', ' ', 'me', ' ', 'a', 'ma']
+              },
+              { 
+                id: 'l6-4', 
+                type: 'sentence', 
+                text: 'amo a mi papá', 
+                words: ['amo', 'a', 'mi', 'papá'],
+                syllables: ['a', 'mo', ' ', 'a', ' ', 'mi', ' ', 'pa', 'pá']
+              }
+            ]
+          },
+          {
+            id: 'level-7',
+            title: 'Nivel 7: Repaso (L)',
+            description: 'Más práctica: loma, palo, ala...',
+            color: 'bg-kid-yellow',
+            items: [
+              { id: 'l7-1', type: 'word', text: 'loma', syllables: ['lo', 'ma'], image: `${IMG_BASE}/hill/300/300` },
+              { id: 'l7-2', type: 'word', text: 'palo', syllables: ['pa', 'lo'], image: `${IMG_BASE}/stick/300/300` },
+              { id: 'l7-3', type: 'word', text: 'ala', syllables: ['a', 'la'], image: `${IMG_BASE}/wing/300/300` },
+              { id: 'l7-4', type: 'word', text: 'pala', syllables: ['pa', 'la'], image: `${IMG_BASE}/shovel/300/300` },
+              { id: 'l7-5', type: 'word', text: 'lima', syllables: ['li', 'ma'], image: `${IMG_BASE}/lime/300/300` },
+              { id: 'l7-6', type: 'word', text: 'pila', syllables: ['pi', 'la'], image: `${IMG_BASE}/battery/300/300` },
+              { id: 'l7-7', type: 'word', text: 'lee', syllables: ['le', 'e'], image: `${IMG_BASE}/reading/300/300` },
+              { id: 'l7-8', type: 'word', text: 'paloma', syllables: ['pa', 'lo', 'ma'], image: `${IMG_BASE}/pigeon/300/300` },
+              { id: 'l7-9', type: 'word', text: 'lomo', syllables: ['lo', 'mo'], image: `${IMG_BASE}/meat/300/300` },
+              { id: 'l7-10', type: 'word', text: 'lupa', syllables: ['lu', 'pa'], image: `${IMG_BASE}/magnifying/300/300` },
+              { id: 'l7-11', type: 'word', text: 'mula', syllables: ['mu', 'la'], image: `${IMG_BASE}/mule/300/300` },
+              { id: 'l7-12', type: 'word', text: 'lame', syllables: ['la', 'me'], image: `${IMG_BASE}/dog/300/300` },
+            ]
           }
-        };
-
-        const handleQuizAnswer = (qIndex, aIndex) => {
-            const isCorrect = material.questions[qIndex].correctIndex === aIndex;
-            setUserAnswers(prev => ({...prev, [qIndex]: aIndex}));
-            if (isCorrect) {
-                setQuizScore(prev => prev + 1);
-            }
-        };
-
-        const submitQuiz = async () => {
-            setViewState('ANALYZING');
-            let audioBase64 = null;
-            if (audioBlob) {
-                try {
-                    audioBase64 = await blobToBase64(audioBlob);
-                } catch (e) {
-                    console.error("Error converting audio blob", e);
-                }
-            }
-            const result = await evaluateReadingSession(
-              material.content, 
-              transcript, 
-              timeElapsed, 
-              quizScore, 
-              material.questions.length,
-              audioBase64
-            );
-            setEvaluation(result);
-            setViewState('COMPARISON');
-        };
-
-        const finishSession = () => {
-            window.speechSynthesis.cancel();
-            onComplete(evaluation.wpm, evaluation.overallScore * 10);
-        };
-
-        if (viewState === 'RESULTS' && evaluation) {
-           const metrics = evaluation.metrics;
-           return (
-             <div className="max-w-3xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-fade-in">
-               <div className="text-center mb-6">
-                 <h2 className="text-3xl font-extrabold text-blue-600 mb-2">¡Lección Completada!</h2>
-                 <div className="flex justify-center items-center gap-2">
-                    <Trophy className="text-yellow-400 w-8 h-8 fill-current" />
-                    <span className="text-2xl font-bold text-gray-700">Puntuación: {evaluation.overallScore}/10</span>
-                 </div>
-               </div>
-
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                  {[
-                    { title: "Precisión", icon: <Target className="text-red-500"/>, data: metrics.precision },
-                    { title: "Fluidez", icon: <Activity className="text-green-500"/>, data: metrics.fluency },
-                    { title: "Tono", icon: <Volume2 className="text-blue-500"/>, data: metrics.tone },
-                    { title: "Comprensión", icon: <BookOpen className="text-purple-500"/>, data: metrics.comprehension },
-                    { title: "Atención", icon: <Eye className="text-orange-500"/>, data: metrics.attention },
-                    { title: "Memoria", icon: <Brain className="text-pink-500"/>, data: metrics.memory },
-                  ].map((item, idx) => (
-                    <div key={idx} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                       <div className="flex justify-between items-center mb-1">
-                          <div className="flex items-center gap-2 font-bold text-gray-700">
-                             {item.icon} {item.title}
-                          </div>
-                          <span className="bg-white px-2 py-1 rounded-lg font-bold text-sm border">{item.data.score}/10</span>
-                       </div>
-                       <p className="text-xs text-gray-500">{item.data.feedback}</p>
-                    </div>
-                  ))}
-               </div>
-
-               <div className="flex justify-center">
-                 <button 
-                    onClick={finishSession}
-                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition hover:scale-105 flex items-center gap-2"
-                  >
-                      <CheckCircle /> Siguiente Lección
-                  </button>
-               </div>
-             </div>
-           );
-        }
-
-        if (viewState === 'ANALYZING') {
-           return (
-              <div className="flex flex-col items-center justify-center min-h-[400px] text-purple-600">
-                  <RefreshCw className="animate-spin w-16 h-16 mb-6" />
-                  <h3 className="text-2xl font-bold mb-2">Analizando tu voz...</h3>
-                  <p className="text-gray-500">El búho sabio está revisando cada palabra.</p>
-              </div>
-           );
-        }
-
-        if (viewState === 'COMPARISON') {
-            return (
-               <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 animate-fade-in">
-                   <h2 className="text-3xl font-bold text-blue-600 text-center">Revisión Fonética</h2>
-                   
-                   <div className="bg-yellow-50 p-6 rounded-2xl border-2 border-yellow-200 max-w-lg w-full">
-                       <h3 className="font-bold text-yellow-800 flex items-center gap-2 mb-2">
-                           <Info size={20}/> Corrección
-                       </h3>
-                       <p className="text-gray-700 text-lg mb-2">
-                         "{evaluation?.spokenFeedback}"
-                       </p>
-                       <div className="flex justify-center mt-2">
-                         <button 
-                            onClick={() => speakText(evaluation?.spokenFeedback)}
-                            className="text-sm bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1 rounded-full flex items-center gap-1"
-                         >
-                            <Volume2 size={14}/> Repetir corrección
-                         </button>
-                       </div>
-                   </div>
-
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
-                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-blue-100 hover:border-blue-300 transition cursor-pointer" onClick={() => audioUrl && new Audio(audioUrl).play()}>
-                           <h3 className="text-xl font-bold text-gray-700 mb-4">Tú dijiste</h3>
-                           <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                               <Ear className="text-white w-10 h-10" />
-                           </div>
-                       </div>
-
-                       <div className="bg-white p-6 rounded-3xl shadow-lg flex flex-col items-center border-2 border-green-100 hover:border-green-300 transition cursor-pointer" onClick={() => speakText(material.content)}>
-                           <h3 className="text-xl font-bold text-gray-700 mb-4">Correcto</h3>
-                           <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                               <Volume2 className="text-white w-10 h-10" />
-                           </div>
-                       </div>
-                   </div>
-
-                   <button 
-                       onClick={() => setViewState('RESULTS')}
-                       className="mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-12 rounded-full text-xl shadow-xl transition"
-                   >
-                       Ver Calificaciones
-                   </button>
-               </div>
-            );
-        }
-
-        if (viewState === 'QUIZ') {
-            const allAnswered = Object.keys(userAnswers).length === material.questions.length;
-            
-            return (
-                <div className="max-w-2xl mx-auto p-6 bg-white rounded-3xl shadow-xl animate-blob">
-                    <h2 className="text-2xl font-bold text-purple-600 mb-4">¿Qué leíste?</h2>
-                    <div className="space-y-6">
-                        {material.questions.map((q, idx) => (
-                            <div key={idx} className="bg-purple-50 p-4 rounded-xl">
-                                <p className="font-bold text-lg mb-3">{q.question}</p>
-                                <div className="grid grid-cols-1 gap-2">
-                                    {q.options.map((opt, optIdx) => (
-                                        <button
-                                          key={optIdx}
-                                          onClick={() => handleQuizAnswer(idx, optIdx)}
-                                          className={`p-3 text-left border-2 rounded-lg transition
-                                            ${userAnswers[idx] === optIdx 
-                                                ? 'bg-purple-200 border-purple-400 font-bold' 
-                                                : 'bg-white border-purple-100 hover:bg-purple-100'}
-                                          `}
-                                        >
-                                            {opt}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="mt-8 flex justify-center">
-                        <button 
-                          onClick={submitQuiz}
-                          disabled={!allAnswered}
-                          className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg"
-                        >
-                            Evaluar Lectura
-                        </button>
-                    </div>
-                </div>
-            )
-        }
-
-        return (
-          <div className="max-w-4xl mx-auto flex flex-col items-center gap-6">
-            <div className="w-full bg-white p-6 rounded-3xl shadow-lg border-b-4 border-blue-200 relative overflow-hidden">
-              <h2 className="text-3xl font-extrabold text-blue-600 mb-2">{material.title}</h2>
-              <span className="inline-block bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-lg font-mono">
-                  {material.theme}
-              </span>
-            </div>
-
-            <div className="w-full bg-amber-50 p-8 rounded-3xl shadow-inner border-4 border-amber-200 min-h-[300px] flex items-center justify-center relative">
-              <p className="text-4xl leading-loose font-medium text-gray-800 text-center font-sans tracking-wide">
-                {material.content}
-              </p>
-              {isRecording && (
-                   <div className="absolute bottom-4 right-4 animate-pulse">
-                      <span className="bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                          Grabando
-                      </span>
-                  </div>
-              )}
-            </div>
-
-            <div className="flex flex-col items-center gap-4 w-full">
-                <div className="flex gap-6 items-center">
-                  {!isRecording && (
-                      <button onClick={toggleRecording} className="group relative flex items-center justify-center w-24 h-24 bg-green-500 rounded-full shadow-green-400 shadow-xl transform transition hover:scale-110 active:scale-95">
-                          <Mic className="text-white w-12 h-12" />
-                      </button>
-                  )}
-                  {isRecording && (
-                      <button onClick={toggleRecording} className="flex items-center justify-center w-24 h-24 bg-red-500 rounded-full shadow-red-400 shadow-xl transform transition hover:scale-110 active:scale-95">
-                          <Square className="text-white w-10 h-10 fill-current" />
-                      </button>
-                  )}
-                </div>
-            </div>
-
-            <button onClick={onRequestBreak} className="mt-8 text-gray-400 hover:text-gray-600 underline text-sm">
-                Necesito un descanso ahora
-            </button>
-          </div>
-        );
-      };
-
-      const BreakGame = ({ onFinishBreak }) => {
-        const [timeLeft, setTimeLeft] = useState(300); 
-        const [score, setScore] = useState(0);
-        const [targetPos, setTargetPos] = useState({ top: '50%', left: '50%' });
-        const [gameActive, setGameActive] = useState(false);
-        const containerRef = useRef(null);
-
-        useEffect(() => {
-          const timer = setInterval(() => {
-            setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-          }, 1000);
-          return () => clearInterval(timer);
-        }, []);
-
-        const moveTarget = () => {
-            if (!containerRef.current) return;
-            const newTop = Math.random() * 80 + 10;
-            const newLeft = Math.random() * 80 + 10;
-            setTargetPos({ top: `${newTop}%`, left: `${newLeft}%` });
-        };
-
-        const handleTargetClick = () => {
-            setScore(s => s + 10);
-            moveTarget();
-        };
-
-        const startGame = () => {
-            setGameActive(true);
-            moveTarget();
-        };
-
-        return (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-900 text-white rounded-3xl p-6 relative overflow-hidden">
-              <div className="absolute top-4 w-full flex justify-between px-8 z-20">
-                  <div className="flex items-center gap-2">
-                      <Trophy className="text-yellow-400" />
-                      <span className="font-bold text-xl">{score} pts</span>
-                  </div>
-                  <div className="font-mono text-xl bg-indigo-800 px-3 py-1 rounded-lg">
-                      {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                  </div>
-              </div>
-
-              <div ref={containerRef} className="w-full max-w-2xl h-96 bg-indigo-800 rounded-2xl relative shadow-inner border-4 border-indigo-700 overflow-hidden cursor-crosshair">
-                  {!gameActive ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/40 backdrop-blur-sm">
-                          <h3 className="text-3xl font-bold mb-4">Atrapa la Burbuja</h3>
-                          <button onClick={startGame} className="bg-yellow-400 text-indigo-900 font-bold py-3 px-8 rounded-full">JUGAR</button>
-                      </div>
-                  ) : (
-                      <button onClick={handleTargetClick} style={{ top: targetPos.top, left: targetPos.left }} className="absolute w-16 h-16 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out">
-                           <div className="w-full h-full bg-gradient-to-br from-pink-400 to-purple-500 rounded-full shadow-lg border-4 border-white flex items-center justify-center">
-                              <Target className="w-8 h-8 text-white" />
-                           </div>
-                      </button>
-                  )}
-              </div>
-              <div className="mt-8 text-center z-20">
-                  <button onClick={onFinishBreak} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg text-sm">Volver a Leer</button>
-              </div>
-          </div>
-        );
-      };
-
-      const Dashboard = ({ user, onSelectLevel, onChangeLevel }) => {
-        // Mapeo directo de las lecciones del libro Mi Jardín (Páginas 4-20)
-        const levels = [
-          { level: 1, name: "Las Vocales", desc: "a, e, i, o, u" },
-          { level: 2, name: "Letra M", desc: "ma, me, mi, mo, mu" },
-          { level: 3, name: "Letra P", desc: "pa, pe, pi, po, pu" },
-          { level: 4, name: "Letra L", desc: "la, le, li, lo, lu" },
-          { level: 5, name: "Letra S", desc: "sa, se, si, so, su" },
-          { level: 6, name: "Letra T", desc: "ta, te, ti, to, tu" },
-          { level: 7, name: "Letra N", desc: "na, ne, ni, no, nu" },
-          { level: 8, name: "Letra D", desc: "da, de, di, do, du" },
-          { level: 9, name: "Letra C", desc: "ca, co, cu (fuerte)" },
-          { level: 10, name: "Letra B", desc: "ba, be, bi, bo, bu" },
-          { level: 11, name: "Letra V", desc: "va, ve, vi, vo, vu" },
-          { level: 12, name: "¡Ya sé leer!", desc: "Lectura completa" },
         ];
 
-        return (
-          <div className="max-w-5xl mx-auto p-4 space-y-8">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center relative overflow-hidden">
-               <div className="absolute -right-6 -top-6 text-white/10 font-bold text-9xl">5</div>
-              <div>
-                  <h1 className="text-4xl font-extrabold mb-2">¡Hola, {user.name}!</h1>
-                  <p className="text-blue-100 text-lg">Lección Actual: Nivel {user.currentLevel}</p>
-              </div>
-              <div className="mt-4 md:mt-0 flex items-center bg-white/20 px-6 py-3 rounded-2xl backdrop-blur-sm z-10">
-                  <Star className="text-yellow-300 w-8 h-8 mr-2 fill-current" />
-                  <span className="text-3xl font-bold">{user.xp} XP</span>
-              </div>
-            </div>
+        // --- SERVICIO IA ---
+        function blobToBase64(blob) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {levels.map((lvl) => {
-                    const isCurrent = lvl.level === user.currentLevel;
-                    const isPassed = lvl.level < user.currentLevel;
+        async function getTeacherFeedback(audioBlob, textRead) {
+          if (!API_KEY || !window.GoogleGenAI) {
+            return "¡Lo hiciste genial! Sigue practicando así de bien.";
+          }
+          try {
+            const ai = new window.GoogleGenAI({ apiKey: API_KEY });
+            const base64Audio = await blobToBase64(audioBlob);
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: {
+                parts: [
+                  { text: `Escucha este audio de un niño leyendo: "${textRead}". Responde en español, muy breve (10 palabras max), felicítalo con entusiasmo.` },
+                  { inlineData: { mimeType: audioBlob.type || 'audio/webm', data: base64Audio } }
+                ]
+              }
+            });
+            return response.text || "¡Muy bien!";
+          } catch (error) {
+            console.error("Error IA:", error);
+            return "¡Eres un campeón! ¡Sigue leyendo!";
+          }
+        }
+
+        // --- COMPONENTE: LECCIÓN ACTIVA ---
+        const ActiveLesson = ({ levelId, model, onBack }) => {
+          const level = LEVELS.find(l => l.id === levelId);
+          const items = level ? level.items : [];
+          
+          const [currentIndex, setCurrentIndex] = useState(0);
+          const [isReading, setIsReading] = useState(false);
+          
+          const [highlightIndex, setHighlightIndex] = useState(-1);
+          const [highlightType, setHighlightType] = useState(null); // 'SYLLABLE', 'WORD', 'FULL', null
+          
+          const [audioBlob, setAudioBlob] = useState(null);
+          const [feedback, setFeedback] = useState(null);
+          const [loadingFeedback, setLoadingFeedback] = useState(false);
+          const [finished, setFinished] = useState(false);
+          const [waitingForNext, setWaitingForNext] = useState(false);
+          const [micError, setMicError] = useState(false);
+          const [playbackRate, setPlaybackRate] = useState(1);
+
+          const mediaRecorderRef = useRef(null);
+          const chunksRef = useRef([]);
+          const synthRef = useRef(window.speechSynthesis);
+          const sequenceIdRef = useRef(0);
+
+          const currentItem = items[currentIndex];
+
+          useEffect(() => { return () => synthRef.current.cancel(); }, []);
+
+          const startSession = async () => {
+            if(isReading) return;
+            setIsReading(true);
+            setFinished(false);
+            setFeedback(null);
+            setAudioBlob(null);
+            setMicError(false);
+            setCurrentIndex(0);
+            chunksRef.current = [];
+
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              const recorder = new MediaRecorder(stream);
+              mediaRecorderRef.current = recorder;
+              recorder.ondataavailable = (e) => {
+                if(e.data.size > 0) chunksRef.current.push(e.data);
+              };
+              recorder.onstop = () => {
+                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                setAudioBlob(blob);
+                stream.getTracks().forEach(t => t.stop());
+              };
+              recorder.start();
+            } catch (err) {
+              setMicError(true);
+            }
+          };
+
+          const handleNext = () => {
+            synthRef.current.cancel();
+            setWaitingForNext(false);
+            setHighlightIndex(-1);
+            setHighlightType(null);
+            
+            if (currentIndex < items.length - 1) {
+              setCurrentIndex(prev => prev + 1);
+            } else {
+              finishSession();
+            }
+          };
+
+          const handlePrev = () => {
+            synthRef.current.cancel();
+            setWaitingForNext(false);
+            setHighlightIndex(-1);
+            setHighlightType(null);
+            if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+          };
+
+          const finishSession = () => {
+            setIsReading(false);
+            setFinished(true);
+            setWaitingForNext(false);
+            synthRef.current.cancel();
+            if(mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+              mediaRecorderRef.current.stop();
+            }
+          };
+
+          // --- LOGICA DE LECTURA (KARAOKE MEJORADO) ---
+          const runSequence = useCallback(async () => {
+            if (!currentItem) return;
+            setWaitingForNext(false);
+            sequenceIdRef.current++;
+            const myId = sequenceIdRef.current;
+
+            const speak = (txt, rate) => new Promise(resolve => {
+              if (myId !== sequenceIdRef.current) return resolve();
+              const u = new SpeechSynthesisUtterance(txt);
+              u.lang = 'es-ES';
+              u.rate = rate; 
+              u.onend = resolve;
+              u.onerror = resolve;
+              synthRef.current.speak(u);
+            });
+
+            const wait = ms => new Promise(r => setTimeout(r, ms));
+
+            await wait(500);
+            if (myId !== sequenceIdRef.current) return;
+
+            // --- MODO 1: SILÁBICO (Para TODOS los niveles si tienen sílabas definidas) ---
+            if (model === ModelType.SYLLABIC) {
+                // Prioridad a la propiedad 'syllables' (Niveles 1, 2, 3 y 4 ahora la tienen)
+                if (currentItem.syllables) {
+                   for (let i = 0; i < currentItem.syllables.length; i++) {
+                      if (myId !== sequenceIdRef.current) return;
+                      const syl = currentItem.syllables[i];
+                      
+                      // Si es un espacio, es una pausa entre palabras
+                      if (syl === ' ') {
+                          await wait(250); 
+                          continue;
+                      }
+
+                      setHighlightIndex(i);
+                      setHighlightType('SYLLABLE');
+                      await speak(syl, 0.6); // Velocidad lenta para sílabas
+                      await wait(150);
+                   }
+                   
+                   // Al terminar las sílabas, lee la palabra/frase completa
+                   if (myId !== sequenceIdRef.current) return;
+                   setHighlightIndex(-1);
+                   setHighlightType('FULL');
+                   await speak(currentItem.text, 0.9);
+                } 
+                else {
+                   // Fallback por si acaso
+                   setHighlightType('FULL');
+                   await speak(currentItem.text, 0.9);
+                }
+            }
+
+            // --- MODO 2: FLUIDEZ ---
+            else if (model === ModelType.FLUENCY) {
+                // Si es una frase, resalta palabra por palabra
+                if (currentItem.words) {
+                    for (let i = 0; i < currentItem.words.length; i++) {
+                        if (myId !== sequenceIdRef.current) return;
+                        setHighlightIndex(i);
+                        setHighlightType('WORD');
+                        await speak(currentItem.words[i], playbackRate);
+                        await wait(20); 
+                    }
+                }
+                // Si es palabra suelta
+                else {
+                    setHighlightType('FULL');
+                    await speak(currentItem.text, playbackRate);
+                }
+            }
+
+            if (myId !== sequenceIdRef.current) return;
+            setHighlightIndex(-1);
+            setHighlightType(null); // Quitar resaltado al esperar
+            setWaitingForNext(true); // Habilitar botón siguiente
+
+          }, [currentItem, model, currentIndex, playbackRate]);
+
+          // Trigger
+          useEffect(() => {
+            if (isReading && !finished) {
+              runSequence();
+            }
+          }, [currentIndex, isReading, finished, runSequence]);
+
+          const pedirFeedback = async () => {
+            if(!audioBlob) return;
+            setLoadingFeedback(true);
+            const textoLeido = items.map(i => i.text).join(", ");
+            const resp = await getTeacherFeedback(audioBlob, textoLeido);
+            setFeedback(resp);
+            setLoadingFeedback(false);
+            const u = new SpeechSynthesisUtterance(resp);
+            u.lang = 'es-ES';
+            synthRef.current.speak(u);
+          };
+
+          const renderText = () => {
+            if (!currentItem) return null;
+
+            // MODO SILÁBICO (con Array de sílabas)
+            if (model === ModelType.SYLLABIC && currentItem.syllables) {
+              return (
+                <div className="flex flex-wrap justify-center items-end gap-1 md:gap-2">
+                  {currentItem.syllables.map((s, i) => {
+                    // Renderizar espacio visual si la sílaba es ' '
+                    if (s === ' ') {
+                        return <div key={i} className="w-8 md:w-12 h-16 inline-block"></div>;
+                    }
+
+                    const isActive = (highlightType === 'SYLLABLE' && highlightIndex === i) || 
+                                     (highlightType === 'FULL');
                     
                     return (
-                        <div 
-                            key={lvl.level}
-                            className={`relative p-6 rounded-2xl border-b-4 transition-all duration-200 flex flex-col justify-between h-40
-                                ${isCurrent ? 'bg-white border-blue-400 shadow-xl ring-2 ring-blue-200 scale-105 z-10' : 
-                                  isPassed ? 'bg-green-50 border-green-200 opacity-80' : 'bg-gray-50 border-gray-200 text-gray-400'}
-                            `}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <div className={`text-sm font-bold uppercase tracking-wider mb-1 ${isCurrent ? 'text-blue-500' : 'text-gray-400'}`}>
-                                        Nivel {lvl.level}
-                                    </div>
-                                    <h3 className={`font-bold text-xl ${isCurrent ? 'text-gray-800' : ''}`}>{lvl.name}</h3>
-                                    <p className="text-sm mt-1">{lvl.desc}</p>
-                                </div>
-                                {isPassed && <CheckCircle className="text-green-500" />}
-                            </div>
-
-                            <div className="mt-4">
-                                {isCurrent ? (
-                                    <button 
-                                        onClick={() => onSelectLevel(lvl.level)}
-                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl font-bold shadow-md flex items-center justify-center gap-2"
-                                    >
-                                        <PlayCircle size={18}/> Comenzar
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={() => onChangeLevel(lvl.level)}
-                                        className={`w-full py-2 rounded-xl font-bold text-sm border-2 
-                                            ${isPassed ? 'border-green-200 text-green-600 hover:bg-green-100' : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
-                                    >
-                                        {isPassed ? 'Repasar' : 'Saltar aquí'}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                      <span key={i} className={`text-6xl md:text-8xl font-bold transition-all duration-300 px-1 rounded-lg 
+                        ${isActive ? 'text-kid-pink scale-110 bg-pink-100 shadow-lg' : 'text-gray-700'}`}>
+                        {s}
+                      </span>
                     );
-                })}
-            </div>
-          </div>
-        );
-      };
+                  })}
+                </div>
+              );
+            }
+            
+            // MODO FLUIDEZ (con Array de palabras)
+            if (currentItem.words) {
+               return (
+                <div className="flex flex-wrap justify-center gap-3">
+                  {currentItem.words.map((w, i) => {
+                    const isActive = (highlightType === 'WORD' && highlightIndex === i) || 
+                                     (highlightType === 'FULL');
 
-      // --- 3. APP PRINCIPAL ---
+                    return (
+                      <span key={i} className={`text-4xl md:text-6xl font-bold transition-all duration-200 px-2 rounded-lg
+                        ${isActive ? 'text-kid-purple bg-purple-100 scale-110 shadow-lg' : 'text-gray-700'}`}>
+                        {w}
+                      </span>
+                    );
+                  })}
+                </div>
+               );
+            }
 
-      function App() {
-        const [user, setUser] = useState(INITIAL_USER);
-        const [appState, setAppState] = useState(AppState.ONBOARDING);
-        const [loading, setLoading] = useState(false);
-        const [currentMaterial, setCurrentMaterial] = useState(null);
-        const [nameInput, setNameInput] = useState('');
+            // MODO SIMPLE (Solo texto)
+            return (
+               <h2 className={`text-6xl md:text-8xl font-bold transition-all duration-300 
+                  ${highlightType === 'FULL' ? 'text-kid-purple scale-110' : 'text-gray-700'}`}>
+                  {currentItem.text}
+               </h2>
+            );
+          };
 
-        useEffect(() => {
-          const saved = localStorage.getItem('leo_user');
-          if (saved) {
-            setUser(JSON.parse(saved));
-            setAppState(AppState.DASHBOARD);
-          }
-        }, []);
+          const isLast = currentIndex === items.length - 1;
 
-        useEffect(() => {
-          if (user.name) {
-            localStorage.setItem('leo_user', JSON.stringify(user));
-          }
-        }, [user]);
-
-        const handleStartOnboarding = () => {
-          if (nameInput.trim()) {
-            setUser({ ...user, name: nameInput });
-            setAppState(AppState.DASHBOARD);
-          }
-        };
-
-        const startReadingSession = async (level) => {
-          setLoading(true);
-          const material = await generateReadingMaterial(level);
-          setCurrentMaterial(material);
-          setLoading(false);
-          setAppState(AppState.READING);
-        };
-
-        const handleLevelChange = (newLevel) => {
-            setUser(prev => ({ ...prev, currentLevel: newLevel }));
-        };
-
-        const handleReadingComplete = (wpm, accuracy) => {
-          const xpGained = Math.round((accuracy + wpm) / 2);
-          setUser(prev => ({
-              ...prev,
-              xp: prev.xp + xpGained,
-              // Avanzar nivel automáticamente si la precisión es buena
-              currentLevel: accuracy > 70 && prev.currentLevel < 12 ? prev.currentLevel + 1 : prev.currentLevel,
-              readingHistory: [...prev.readingHistory, { date: new Date().toISOString(), wpm, accuracy, level: prev.currentLevel }]
-          }));
-          setAppState(AppState.DASHBOARD);
-        };
-
-        const handleRequestBreak = () => {
-            setAppState(AppState.BREAK_TIME);
-        };
-
-        const handleBreakFinish = () => {
-            setAppState(AppState.DASHBOARD);
-        };
-
-        if (appState === AppState.ONBOARDING) {
           return (
-            <div className="min-h-screen bg-[#F0F9FF] flex items-center justify-center p-4 relative overflow-hidden">
-               <div className="absolute top-10 left-10 text-9xl font-black text-blue-100 opacity-50 select-none">5</div>
-               <div className="absolute bottom-10 right-10 text-9xl font-black text-blue-100 opacity-50 select-none">5</div>
+            <div className="flex flex-col h-full max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden relative border-4 border-white">
               
-              <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border-b-8 border-blue-500 relative z-10">
-                  <div className="flex justify-center mb-6">
-                      <div className="bg-blue-100 p-4 rounded-full">
-                          <Rocket className="text-blue-600 w-16 h-16" />
-                      </div>
-                  </div>
-                  <h1 className="text-4xl font-black text-gray-800 mb-2">LeoAventuras <span className="text-blue-500 text-5xl">5</span></h1>
-                  <p className="text-gray-500 mb-8 text-lg">Aprende con el libro "Mi Jardín"</p>
-                  
-                  <div className="space-y-4">
-                      <label className="block text-left font-bold text-gray-700 ml-1">¿Cómo te llamas?</label>
+              {/* Barra superior */}
+              <div className={`p-4 flex flex-col md:flex-row items-center justify-between text-white ${level.color} gap-4`}>
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                   <button onClick={onBack} className="bg-white/20 hover:bg-white/40 px-4 py-2 rounded-full font-bold btn-press">
+                     🏠 Salir
+                   </button>
+                   <span className="text-xl font-bold uppercase tracking-wider hidden md:block">{model === ModelType.SYLLABIC ? '🐢 Silábico' : '🐇 Fluidez'}</span>
+                </div>
+
+                {/* SLIDER DE VELOCIDAD (SOLO FLUIDEZ) */}
+                {model === ModelType.FLUENCY && (
+                   <div className="flex items-center gap-2 bg-white/20 p-2 rounded-xl w-full md:w-64">
+                      <span className="text-2xl">🐢</span>
                       <input 
-                          type="text" 
-                          value={nameInput}
-                          onChange={(e) => setNameInput(e.target.value)}
-                          placeholder="Tu nombre..."
-                          className="w-full text-xl p-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-                          onKeyDown={(e) => e.key === 'Enter' && handleStartOnboarding()}
+                        type="range" 
+                        min="0.5" 
+                        max="1.5" 
+                        step="0.1" 
+                        value={playbackRate} 
+                        onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                        title="Velocidad de lectura"
                       />
+                      <span className="text-2xl">🐇</span>
+                   </div>
+                )}
+              </div>
+
+              {/* Área principal */}
+              <div className="flex-1 relative flex flex-col items-center justify-center p-4 bg-slate-50">
+                
+                {/* Progreso */}
+                <div className="absolute top-0 left-0 h-2 bg-gray-200 w-full">
+                  <div className="h-full bg-kid-green transition-all duration-500" style={{ width: `${((currentIndex + 1) / items.length) * 100}%` }}></div>
+                </div>
+
+                {/* Botones Flotantes de Navegación */}
+                <div className="w-full flex justify-between items-center absolute px-2 md:px-8 top-1/2 -translate-y-1/2 z-0 pointer-events-none">
+                   <button onClick={handlePrev} disabled={currentIndex === 0} 
+                      className={`pointer-events-auto w-16 h-16 rounded-full bg-white shadow-xl flex items-center justify-center text-3xl hover:bg-blue-50 transition-all ${currentIndex===0 ? 'opacity-0' : 'opacity-100'}`}>
+                      👈
+                   </button>
+                   
+                   {/* Botón Siguiente (Flecha) */}
+                   <button onClick={handleNext} 
+                      /* Habilitado si NO estamos leyendo, O si estamos leyendo pero esperando confirmación */
+                      disabled={isReading && !waitingForNext}
+                      className={`pointer-events-auto w-20 h-20 rounded-full shadow-2xl flex items-center justify-center text-4xl transition-all border-4 
+                      ${waitingForNext 
+                         ? 'bg-kid-green text-white border-green-200 animate-bounce cursor-pointer opacity-100 scale-110' 
+                         : 'bg-white text-gray-300 border-gray-100 opacity-50 cursor-not-allowed'}
+                      ${(!isReading && !finished) ? 'opacity-20' : ''}
+                      `}>
+                      {isLast ? '🏁' : '👉'}
+                   </button>
+                </div>
+
+                <div className="z-10 flex flex-col items-center gap-8 w-full max-w-2xl">
+                   {currentItem.image && (
+                     <div className="bg-white p-3 rounded-2xl shadow-lg transform -rotate-2 border-2 border-gray-100">
+                        <img src={currentItem.image} className="h-48 md:h-64 object-contain rounded-lg" alt="imagen" />
+                     </div>
+                   )}
+                   
+                   <div className="text-center min-h-[120px] flex items-center justify-center w-full">
+                      {renderText()}
+                   </div>
+
+                   {/* BOTÓN CENTRAL DE CONFIRMACIÓN */}
+                   {waitingForNext && isReading && (
+                     <button 
+                        onClick={handleNext}
+                        className="mt-6 bg-kid-green hover:bg-green-500 text-white text-3xl font-extrabold py-4 px-10 rounded-full shadow-[0_6px_0_0_#047857] hover:shadow-[0_3px_0_0_#047857] hover:translate-y-1 transition-all animate-bounce flex items-center gap-3 border-4 border-white z-50 pointer-events-auto"
+                     >
+                        ✅ ¡Terminé!
+                     </button>
+                   )}
+                </div>
+              </div>
+
+              {/* Controles inferiores */}
+              <div className="bg-white p-6 border-t flex flex-col items-center gap-4">
+                {micError && isReading && (
+                  <p className="text-red-500 text-sm font-bold bg-red-50 px-3 py-1 rounded-lg border border-red-200">
+                    ⚠️ Micrófono bloqueado (modo lectura práctica).
+                  </p>
+                )}
+
+                {!isReading && !finished && (
+                  <button onClick={startSession} className="bg-kid-green hover:bg-green-400 text-white text-3xl font-extrabold py-4 px-12 rounded-full shadow-[0_6px_0_0_#05b586] btn-press transition-all flex gap-3 items-center">
+                    ▶️ ¡COMENZAR!
+                  </button>
+                )}
+
+                {isReading && (
+                   <div className="flex flex-col items-center">
+                     <span className="flex items-center gap-2 text-red-500 font-bold uppercase tracking-widest text-sm animate-pulse">
+                       🔴 Grabando sesión
+                     </span>
+                     <button onClick={finishSession} className="text-gray-400 underline text-sm mt-2 hover:text-gray-600">
+                       Detener lección
+                     </button>
+                   </div>
+                )}
+
+                {finished && (
+                  <div className="flex flex-col items-center gap-4 w-full">
+                    <h3 className="text-2xl font-bold text-kid-blue">🎉 ¡Lección Terminada! 🎉</h3>
+                    
+                    {audioBlob && (
                       <button 
-                          onClick={handleStartOnboarding}
-                          disabled={!nameInput.trim()}
-                          className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xl shadow-lg transition"
+                        onClick={() => {
+                           const audio = new Audio(URL.createObjectURL(audioBlob));
+                           audio.play();
+                        }}
+                        className="bg-blue-400 hover:bg-blue-500 text-white text-xl font-bold py-3 px-8 rounded-full shadow-lg transition-all flex items-center gap-2"
                       >
-                          ¡Comenzar!
+                         🔊 Escuchar mi lectura
                       </button>
+                    )}
+
+                    {!feedback ? (
+                       <button onClick={pedirFeedback} disabled={loadingFeedback} className="bg-kid-purple text-white text-xl font-bold py-3 px-8 rounded-full shadow-lg hover:bg-purple-600 transition-all disabled:opacity-50">
+                          {loadingFeedback ? '⏳ El Profe está escuchando...' : '✨ ¿Qué dice el Profe Mágico?'}
+                       </button>
+                    ) : (
+                       <div className="bg-yellow-50 border-l-4 border-kid-yellow p-4 rounded text-left max-w-lg">
+                          <p className="text-gray-600 font-bold mb-1">🤖 Profe IA:</p>
+                          <p className="text-xl italic text-gray-800">"{feedback}"</p>
+                       </div>
+                    )}
+                    
+                    <button onClick={() => { setFinished(false); setCurrentIndex(0); setAudioBlob(null); setFeedback(null); }} className="text-gray-500 font-bold mt-2 hover:text-kid-blue">
+                       🔄 Repetir Lección
+                    </button>
                   </div>
+                )}
               </div>
             </div>
           );
-        }
+        };
 
-        if (loading) {
-            return (
-                <div className="min-h-screen flex flex-col items-center justify-center bg-blue-50">
-                    <Loader2 className="w-16 h-16 text-blue-500 animate-spin mb-4" />
-                    <h2 className="text-2xl font-bold text-blue-700 animate-pulse">Abriendo tu libro...</h2>
+        // --- MENU PRINCIPAL ---
+        const App = () => {
+          const [level, setLevel] = useState(null);
+          const [model, setModel] = useState(ModelType.SYLLABIC);
+
+          if (level) {
+             return (
+               <div className="min-h-screen bg-blue-100 p-2 md:p-6 flex items-center justify-center">
+                 <ActiveLesson levelId={level} model={model} onBack={() => setLevel(null)} />
+               </div>
+             )
+          }
+
+          return (
+            <div className="min-h-screen bg-gradient-to-b from-cyan-50 to-blue-100 p-6 font-sans">
+              <div className="max-w-5xl mx-auto">
+                <header className="text-center py-10">
+                  <h1 className="text-5xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-kid-blue to-kid-pink drop-shadow-sm mb-4">
+                    Aprende a Leer
+                  </h1>
+                  <p className="text-xl text-gray-500 font-medium">¡Tu aventura mágica con las letras!</p>
+                </header>
+
+                <div className="flex justify-center mb-10">
+                  <div className="bg-white p-2 rounded-full shadow-md inline-flex flex-wrap justify-center gap-2">
+                    <button onClick={() => setModel(ModelType.SYLLABIC)} 
+                      className={`px-6 py-3 rounded-full text-lg font-bold transition-all ${model === ModelType.SYLLABIC ? 'bg-kid-yellow text-gray-900 shadow-sm' : 'text-gray-400 hover:bg-gray-50'}`}>
+                      🐢 Modo Silábico
+                    </button>
+                    <button onClick={() => setModel(ModelType.FLUENCY)} 
+                      className={`px-6 py-3 rounded-full text-lg font-bold transition-all ${model === ModelType.FLUENCY ? 'bg-kid-green text-white shadow-sm' : 'text-gray-400 hover:bg-gray-50'}`}>
+                      🐇 Modo Fluidez
+                    </button>
+                  </div>
                 </div>
-            )
-        }
 
-        return (
-          <div className="min-h-screen bg-[#F0F9FF] pb-10">
-              <div className="bg-white shadow-sm p-4 sticky top-0 z-50 mb-6">
-                  <div className="max-w-5xl mx-auto flex justify-between items-center">
-                      <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppState(AppState.DASHBOARD)}>
-                          <Rocket className="text-blue-600"/>
-                          <span className="font-extrabold text-xl tracking-tight text-gray-800">LeoAventuras <span className="text-blue-500">5</span></span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {LEVELS.map(lvl => (
+                    <button key={lvl.id} onClick={() => setLevel(lvl.id)}
+                      className="group bg-white rounded-3xl p-6 shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 text-left border-b-8 border-gray-100 hover:border-kid-blue relative overflow-hidden">
+                      <div className={`absolute top-0 right-0 w-24 h-24 rounded-bl-full opacity-20 ${lvl.color} transition-transform group-hover:scale-150`}></div>
+                      <div className={`w-16 h-16 rounded-2xl ${lvl.color} flex items-center justify-center text-3xl shadow-inner mb-4`}>
+                        {lvl.id === 'level-1' ? '🅰️' : lvl.id === 'level-2' ? '🗣️' : lvl.id === 'level-3' ? '📜' : lvl.id === 'level-4' ? '🎈' : lvl.id === 'level-5' ? '🦁' : lvl.id === 'level-6' ? '👪' : '📖'}
                       </div>
-                      <div className="flex gap-4">
-                         {appState !== AppState.BREAK_TIME && (
-                           <button 
-                              onClick={() => setAppState(AppState.BREAK_TIME)}
-                              className="bg-purple-100 text-purple-700 px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition"
-                           >
-                               <Brain size={16} /> Descanso
-                           </button>
-                         )}
-                      </div>
-                  </div>
+                      <h3 className="text-2xl font-bold text-gray-800 mb-2 leading-tight">{lvl.title}</h3>
+                      <p className="text-sm text-gray-400 font-medium">{lvl.description}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
+            </div>
+          );
+        };
 
-              {appState === AppState.DASHBOARD && (
-                  <Dashboard 
-                      user={user} 
-                      onSelectLevel={startReadingSession} 
-                      onChangeLevel={handleLevelChange} 
-                  />
-              )}
-
-              {appState === AppState.READING && currentMaterial && (
-                  <ReadingView 
-                      material={currentMaterial} 
-                      onComplete={handleReadingComplete}
-                      onRequestBreak={handleRequestBreak}
-                  />
-              )}
-
-              {appState === AppState.BREAK_TIME && (
-                  <div className="max-w-4xl mx-auto p-4 h-[80vh]">
-                      <BreakGame onFinishBreak={handleBreakFinish} />
-                  </div>
-              )}
-          </div>
-        );
-      }
-
-      const rootElement = document.getElementById('root');
-      const root = ReactDOM.createRoot(rootElement);
-      root.render(
-        <React.StrictMode>
-          <App />
-        </React.StrictMode>
-      );
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
-  <script type="module" src="/index.tsx"></script>
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>

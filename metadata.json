@@ -1,6 +1,6 @@
 {
-  "name": "LeoAventuras: Lectura Divertida",
-  "description": "Una aplicación interactiva diseñada para ayudar a niños con TDAH a mejorar sus habilidades de lectura mediante gamificación, lectura asistida por IA y descansos estratégicos.",
+  "name": "Aprende a Leer con IA",
+  "description": "Una aplicación interactiva para aprender a leer usando métodos silábicos y de fluidez, potenciada por IA.",
   "requestFramePermissions": [
     "microphone"
   ]
